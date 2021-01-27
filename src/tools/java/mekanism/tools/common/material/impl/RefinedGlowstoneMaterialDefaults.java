@@ -1,73 +1,57 @@
 package mekanism.tools.common.material.impl;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import mekanism.common.tags.MekanismTags;
+import mekanism.tools.common.ToolsTags;
 import mekanism.tools.common.material.BaseMekanismMaterial;
-import net.minecraft.inventory.EquipmentSlotType;
-import net.minecraft.item.crafting.Ingredient;
-import net.minecraft.util.SoundEvent;
-import net.minecraft.util.SoundEvents;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.tags.TagKey;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.world.level.block.Block;
 
 public class RefinedGlowstoneMaterialDefaults extends BaseMekanismMaterial {
 
     @Override
     public int getShieldDurability() {
-        return 806;
+        return 381;
     }
 
     @Override
     public float getAxeDamage() {
-        return 3;
+        return 6;
     }
 
     @Override
     public float getAxeAtkSpeed() {
-        return -3.1F;
+        return -2.9F;
     }
 
     @Override
-    public float getPaxelDamage() {
-        return 4;
+    public int getUses() {
+        return 384;
     }
 
     @Override
-    public int getPaxelHarvestLevel() {
-        return 3;
+    public float getSpeed() {
+        return 15;
     }
 
     @Override
-    public int getPaxelMaxUses() {
-        return 450;
-    }
-
-    @Override
-    public float getPaxelEfficiency() {
-        return 18;
-    }
-
-    @Override
-    public int getMaxUses() {
-        return 300;
-    }
-
-    @Override
-    public float getEfficiency() {
-        return 14;
-    }
-
-    @Override
-    public float getAttackDamage() {
-        return 5;
-    }
-
-    @Override
-    public int getHarvestLevel() {
+    public float getAttackDamageBonus() {
         return 2;
     }
 
     @Override
+    public int getLevel() {
+        return 3;
+    }
+
+    @Override
     public int getCommonEnchantability() {
-        return 18;
+        return 20;
     }
 
     @Override
@@ -76,33 +60,31 @@ public class RefinedGlowstoneMaterialDefaults extends BaseMekanismMaterial {
     }
 
     @Override
-    public int getDurability(@Nonnull EquipmentSlotType slotType) {
-        switch (slotType) {
-            case FEET:
-                return 234;
-            case LEGS:
-                return 270;
-            case CHEST:
-                return 288;
-            case HEAD:
-                return 198;
-        }
-        return 0;
+    public int getDurabilityForSlot(@Nonnull EquipmentSlot slotType) {
+        return switch (slotType) {
+            case FEET -> 221;
+            case LEGS -> 255;
+            case CHEST -> 272;
+            case HEAD -> 187;
+            default -> 0;
+        };
     }
 
     @Override
-    public int getDamageReductionAmount(@Nonnull EquipmentSlotType slotType) {
-        switch (slotType) {
-            case FEET:
-                return 3;
-            case LEGS:
-                return 6;
-            case CHEST:
-                return 7;
-            case HEAD:
-                return 3;
-        }
-        return 0;
+    public int getDefenseForSlot(@Nonnull EquipmentSlot slotType) {
+        return switch (slotType) {
+            case FEET -> 3;
+            case LEGS -> 6;
+            case CHEST -> 8;
+            case HEAD -> 3;
+            default -> 0;
+        };
+    }
+
+    @Nonnull
+    @Override
+    public String getConfigCommentName() {
+        return "Refined Glowstone";
     }
 
     @Nonnull
@@ -111,21 +93,22 @@ public class RefinedGlowstoneMaterialDefaults extends BaseMekanismMaterial {
         return "refined_glowstone";
     }
 
+    @Nullable
     @Override
-    public int getPaxelEnchantability() {
-        return 22;
+    public TagKey<Block> getTag() {
+        return ToolsTags.Blocks.NEEDS_REFINED_GLOWSTONE_TOOL;
     }
 
     @Nonnull
     @Override
-    public SoundEvent getSoundEvent() {
-        return SoundEvents.ITEM_ARMOR_EQUIP_IRON;
+    public SoundEvent getEquipSound() {
+        return SoundEvents.ARMOR_EQUIP_IRON;
     }
 
     @Nonnull
     @Override
     public Ingredient getCommonRepairMaterial() {
-        return Ingredient.fromTag(MekanismTags.Items.INGOTS_REFINED_GLOWSTONE);
+        return Ingredient.of(MekanismTags.Items.INGOTS_REFINED_GLOWSTONE);
     }
 
     @Override

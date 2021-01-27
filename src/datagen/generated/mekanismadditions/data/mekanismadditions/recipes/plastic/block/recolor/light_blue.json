@@ -1,20 +1,26 @@
 {
   "type": "minecraft:crafting_shaped",
-  "result": {
-    "item": "mekanismadditions:light_blue_plastic",
-    "count": 4
+  "key": {
+    "#": {
+      "type": "forge:difference",
+      "base": {
+        "tag": "mekanismadditions:plastic_blocks/plastic"
+      },
+      "subtracted": {
+        "item": "mekanismadditions:light_blue_plastic"
+      }
+    },
+    "D": {
+      "tag": "forge:dyes/light_blue"
+    }
   },
   "pattern": [
     " # ",
     "#D#",
     " # "
   ],
-  "key": {
-    "#": {
-      "tag": "mekanismadditions:plastic_blocks/plastic"
-    },
-    "D": {
-      "tag": "forge:dyes/light_blue"
-    }
+  "result": {
+    "count": 4,
+    "item": "mekanismadditions:light_blue_plastic"
   }
 }

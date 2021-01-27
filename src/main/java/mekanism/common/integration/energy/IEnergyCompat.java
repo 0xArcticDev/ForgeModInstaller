@@ -4,7 +4,8 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
 import mekanism.api.energy.IStrictEnergyHandler;
-import net.minecraft.util.Direction;
+import mekanism.common.util.CapabilityUtils;
+import net.minecraft.core.Direction;
 import net.minecraftforge.common.capabilities.Capability;
 import net.minecraftforge.common.capabilities.ICapabilityProvider;
 import net.minecraftforge.common.util.LazyOptional;
@@ -13,7 +14,7 @@ import net.minecraftforge.common.util.LazyOptional;
 public interface IEnergyCompat {
 
     /**
-     * Whether or not this energy compat is actually enabled.
+     * Whether this energy compat is actually enabled.
      *
      * @return if this energy compat is enabled.
      */
@@ -22,9 +23,9 @@ public interface IEnergyCompat {
     /**
      * Gets the capability this compat integrates with.
      *
-     * @return The capability this compat is integrating with. Or {@code null} if the capability is not usable.
+     * @return The capability this compat is integrating with.
      */
-    @Nullable
+    @Nonnull
     Capability<?> getCapability();
 
     /**
@@ -48,7 +49,9 @@ public interface IEnergyCompat {
      *
      * @implNote The capabilities should be kept lazy so that they are not resolved if they are not needed yet.
      */
-    boolean isCapabilityPresent(ICapabilityProvider provider, @Nullable Direction side);
+    default boolean isCapabilityPresent(ICapabilityProvider provider, @Nullable Direction side) {
+        return CapabilityUtils.getCapability(provider, getCapability(), side).isPresent();
+    }
 
     /**
      * Gets the {@link IStrictEnergyHandler} as a lazy optional for the capability this energy compat is for.

@@ -1,8 +1,8 @@
 package mekanism.api.text;
 
 import mekanism.api.MekanismAPI;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.Util;
+import net.minecraft.Util;
+import net.minecraft.resources.ResourceLocation;
 
 /**
  * Lang entries declared in the API and provided by Mekanism.
@@ -23,8 +23,11 @@ public enum APILang implements ILangEntry {
     UPGRADE_MUFFLING_DESCRIPTION("upgrade", "muffling.description"),
     UPGRADE_ANCHOR("upgrade", "anchor"),
     UPGRADE_ANCHOR_DESCRIPTION("upgrade", "anchor.description"),
-    //Generic
-    GENERIC("generic", "format"),
+    UPGRADE_STONE_GENERATOR("upgrade", "stone_generator"),
+    UPGRADE_STONE_GENERATOR_DESCRIPTION("upgrade", "stone_generator.description"),
+    //Boolean
+    TRUE_LOWER("gui", "true_lower"),
+    FALSE_LOWER("gui", "false_lower"),
     //Directions
     DOWN("direction", "down"),
     UP("direction", "up"),
@@ -62,12 +65,18 @@ public enum APILang implements ILangEntry {
     CHEMICAL_ATTRIBUTE_RADIATION("chemical", "attribute.radiation"),
     CHEMICAL_ATTRIBUTE_COOLANT_EFFICIENCY("chemical", "attribute.coolant.efficiency"),
     CHEMICAL_ATTRIBUTE_COOLANT_ENTHALPY("chemical", "attribute.coolant.heat_capacity"),
+    CHEMICAL_ATTRIBUTE_FUEL_BURN_TICKS("chemical", "attribute.fuel.burn_ticks"),
+    CHEMICAL_ATTRIBUTE_FUEL_ENERGY_DENSITY("chemical", "attribute.fuel.energy_density"),
+    //Security
+    PUBLIC("security", "public"),
+    TRUSTED("security", "trusted"),
+    PRIVATE("security", "private"),
     ;
 
     private final String key;
 
     APILang(String type, String path) {
-        this(Util.makeTranslationKey(type, new ResourceLocation(MekanismAPI.MEKANISM_MODID, path)));
+        this(Util.makeDescriptionId(type, new ResourceLocation(MekanismAPI.MEKANISM_MODID, path)));
     }
 
     APILang(String key) {

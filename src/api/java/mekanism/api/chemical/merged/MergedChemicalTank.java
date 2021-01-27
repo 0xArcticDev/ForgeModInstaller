@@ -9,10 +9,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
-import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
-import mcp.MethodsReturnNonnullByDefault;
 import mekanism.api.annotations.FieldsAreNonnullByDefault;
 import mekanism.api.chemical.Chemical;
 import mekanism.api.chemical.ChemicalStack;
@@ -30,12 +28,26 @@ import mekanism.api.chemical.pigment.PigmentStack;
 import mekanism.api.chemical.slurry.ISlurryTank;
 import mekanism.api.chemical.slurry.Slurry;
 import mekanism.api.chemical.slurry.SlurryStack;
+import net.minecraft.MethodsReturnNonnullByDefault;
 
+/**
+ * Class to help manage having a chemical tank that supports all the different types of chemicals, but only one type at a time.
+ */
 @FieldsAreNonnullByDefault
 @ParametersAreNonnullByDefault
 @MethodsReturnNonnullByDefault
 public class MergedChemicalTank {
 
+    /**
+     * Creates a new merged chemical tank out of a variety of chemical tanks.
+     *
+     * @param gasTank      Gas tank.
+     * @param infusionTank Infusion tank.
+     * @param pigmentTank  Pigment tank.
+     * @param slurryTank   Slurry tank.
+     *
+     * @return Merged chemical tank.
+     */
     public static MergedChemicalTank create(IGasTank gasTank, IInfusionTank infusionTank, IPigmentTank pigmentTank, ISlurryTank slurryTank) {
         Objects.requireNonNull(gasTank, "Gas tank cannot be null");
         Objects.requireNonNull(infusionTank, "Infusion tank cannot be null");
@@ -56,7 +68,7 @@ public class MergedChemicalTank {
             for (IChemicalTank<?, ?> tank : allTanks) {
                 if (type.canHandle(tank)) {
                     //TODO: Improve this so it doesn't have to loop nearly as much?
-                    List<IChemicalTank<?, ?>> otherTanks = Arrays.stream(allTanks).filter(otherTank -> tank != otherTank).collect(Collectors.toList());
+                    List<IChemicalTank<?, ?>> otherTanks = Arrays.stream(allTanks).filter(otherTank -> tank != otherTank).toList();
                     BooleanSupplier insertionCheck;
                     if (extraCheck == null) {
                         insertionCheck = () -> otherTanks.stream().allMatch(IChemicalTank::isEmpty);
@@ -74,39 +86,60 @@ public class MergedChemicalTank {
         }
     }
 
+    /**
+     * Gets all the backing chemical tanks this merged tank manages.
+     */
     public Collection<IChemicalTank<?, ?>> getAllTanks() {
         return tankMap.values();
     }
 
+    /**
+     * Gets the internal chemical tank for a given chemical type.
+     *
+     * @param chemicalType Type of chemical.
+     *
+     * @return Internal tank.
+     */
     public IChemicalTank<?, ?> getTankForType(ChemicalType chemicalType) {
-        if (chemicalType == ChemicalType.GAS) {
-            return getGasTank();
-        } else if (chemicalType == ChemicalType.INFUSION) {
-            return getInfusionTank();
-        } else if (chemicalType == ChemicalType.PIGMENT) {
-            return getPigmentTank();
-        } else if (chemicalType == ChemicalType.SLURRY) {
-            return getSlurryTank();
-        }
-        throw new IllegalStateException("Unknown chemical type");
+        return switch (chemicalType) {
+            case GAS -> getGasTank();
+            case INFUSION -> getInfusionTank();
+            case PIGMENT -> getPigmentTank();
+            case SLURRY -> getSlurryTank();
+        };
     }
 
+    /**
+     * Gets the internal gas tank.
+     */
     public final IGasTank getGasTank() {
         return (IGasTank) tankMap.get(ChemicalTankType.GAS);
     }
 
+    /**
+     * Gets the internal infusion tank.
+     */
     public final IInfusionTank getInfusionTank() {
         return (IInfusionTank) tankMap.get(ChemicalTankType.INFUSE_TYPE);
     }
 
+    /**
+     * Gets the internal pigment tank.
+     */
     public final IPigmentTank getPigmentTank() {
         return (IPigmentTank) tankMap.get(ChemicalTankType.PIGMENT);
     }
 
+    /**
+     * Gets the internal slurry tank.
+     */
     public final ISlurryTank getSlurryTank() {
         return (ISlurryTank) tankMap.get(ChemicalTankType.SLURRY);
     }
 
+    /**
+     * Gets the current type of substance stored in this merged chemical tank or {@link Current#EMPTY} if this merged chemical tank is empty.
+     */
     public Current getCurrent() {
         if (!getGasTank().isEmpty()) {
             return Current.GAS;
@@ -120,18 +153,21 @@ public class MergedChemicalTank {
         return Current.EMPTY;
     }
 
+    /**
+     * Gets the internal chemical tank for a given current type. This does not support getting the tank for the empty type.
+     *
+     * @param current Current type.
+     *
+     * @return Internal tank.
+     */
     public IChemicalTank<?, ?> getTankFromCurrent(Current current) {
-        switch (current) {
-            case GAS:
-                return getGasTank();
-            case INFUSION:
-                return getInfusionTank();
-            case PIGMENT:
-                return getPigmentTank();
-            case SLURRY:
-                return getSlurryTank();
-        }
-        throw new IllegalStateException("Unknown chemical type");
+        return switch (current) {
+            case GAS -> getGasTank();
+            case INFUSION -> getInfusionTank();
+            case PIGMENT -> getPigmentTank();
+            case SLURRY -> getSlurryTank();
+            case EMPTY -> throw new UnsupportedOperationException("Empty chemical type is unsupported for getting current tank.");
+        };
     }
 
     public enum Current {
@@ -148,7 +184,8 @@ public class MergedChemicalTank {
         TANK create(MergedChemicalTank mergedTank, TANK tank, BooleanSupplier insertCheck);
     }
 
-    private static class ChemicalTankType<CHEMICAL extends Chemical<CHEMICAL>, STACK extends ChemicalStack<CHEMICAL>, TANK extends IChemicalTank<CHEMICAL, STACK>> {
+    private record ChemicalTankType<CHEMICAL extends Chemical<CHEMICAL>, STACK extends ChemicalStack<CHEMICAL>, TANK extends IChemicalTank<CHEMICAL, STACK>>(
+          String type, IWrapperCreator<CHEMICAL, STACK, TANK> tankWrapper, Predicate<IChemicalTank<?, ?>> tankValidator) {
 
         private static final List<ChemicalTankType<?, ?, ?>> TYPES = new ArrayList<>();
         private static final ChemicalTankType<Gas, GasStack, IGasTank> GAS = new ChemicalTankType<>("gas", GasTankWrapper::new, tank -> tank instanceof IGasTank);
@@ -156,14 +193,7 @@ public class MergedChemicalTank {
         private static final ChemicalTankType<Pigment, PigmentStack, IPigmentTank> PIGMENT = new ChemicalTankType<>("pigment", PigmentTankWrapper::new, tank -> tank instanceof IPigmentTank);
         private static final ChemicalTankType<Slurry, SlurryStack, ISlurryTank> SLURRY = new ChemicalTankType<>("slurry", SlurryTankWrapper::new, tank -> tank instanceof ISlurryTank);
 
-        private final IWrapperCreator<CHEMICAL, STACK, TANK> tankWrapper;
-        private final Predicate<IChemicalTank<?, ?>> tankValidator;
-        private final String type;
-
-        ChemicalTankType(String type, IWrapperCreator<CHEMICAL, STACK, TANK> tankWrapper, Predicate<IChemicalTank<?, ?>> tankValidator) {
-            this.type = type;
-            this.tankWrapper = tankWrapper;
-            this.tankValidator = tankValidator;
+        private ChemicalTankType {
             //Add to known types
             TYPES.add(this);
         }

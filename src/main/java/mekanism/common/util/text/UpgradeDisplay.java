@@ -4,7 +4,7 @@ import mekanism.api.Upgrade;
 import mekanism.api.text.EnumColor;
 import mekanism.api.text.IHasTextComponent;
 import mekanism.common.MekanismLang;
-import net.minecraft.util.text.ITextComponent;
+import net.minecraft.network.chat.Component;
 
 public class UpgradeDisplay implements IHasTextComponent {
 
@@ -25,10 +25,10 @@ public class UpgradeDisplay implements IHasTextComponent {
     }
 
     @Override
-    public ITextComponent getTextComponent() {
-        if (upgrade.canMultiply() && level > 0) {
+    public Component getTextComponent() {
+        if (upgrade.getMax() > 1 && level > 0) {
             return MekanismLang.UPGRADE_DISPLAY_LEVEL.translateColored(upgrade.getColor(), upgrade, EnumColor.GRAY, level);
         }
-        return MekanismLang.UPGRADE_DISPLAY.translateColored(upgrade.getColor(), upgrade);
+        return MekanismLang.GENERIC_LIST.translateColored(upgrade.getColor(), upgrade);
     }
 }

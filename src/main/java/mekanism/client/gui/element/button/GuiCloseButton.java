@@ -1,9 +1,9 @@
 package mekanism.client.gui.element.button;
 
-import com.mojang.blaze3d.matrix.MatrixStack;
+import com.mojang.blaze3d.vertex.PoseStack;
 import javax.annotation.Nonnull;
 import mekanism.client.gui.IGuiWrapper;
-import mekanism.client.gui.element.GuiWindow;
+import mekanism.client.gui.element.window.GuiWindow;
 import mekanism.common.MekanismLang;
 import mekanism.common.util.MekanismUtils;
 import mekanism.common.util.MekanismUtils.ResourceType;
@@ -15,8 +15,9 @@ public class GuiCloseButton extends MekanismImageButton {
     }
 
     @Override
-    public void renderToolTip(@Nonnull MatrixStack matrix, int mouseX, int mouseY) {
-        displayTooltip(matrix, MekanismLang.CLOSE.translate(), mouseX, mouseY);
+    public void renderToolTip(@Nonnull PoseStack matrix, int mouseX, int mouseY) {
+        super.renderToolTip(matrix, mouseX, mouseY);
+        displayTooltips(matrix, mouseX, mouseY, MekanismLang.CLOSE.translate());
     }
 
     @Override

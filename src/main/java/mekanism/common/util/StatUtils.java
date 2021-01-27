@@ -7,17 +7,19 @@ public class StatUtils {
     private StatUtils() {
     }
 
-    public static final Random rand = new Random();
+    private static final Random rand = new Random();
+    private static final double STIRLING_COEFF = 1 / Math.sqrt(2 * Math.PI);
 
+    //TODO: Re-evaluate the need for this
     public static int inversePoisson(double mean) {
         double r = rand.nextDouble() * Math.exp(mean);
         int m = 0;
         double p = 1;
         double stirlingValue = mean * Math.E;
-        double stirlingCoeff = 1 / Math.sqrt(2 * Math.PI);
-        while ((p < r) && (m < 3 * Math.ceil(mean))) {
+        double mBound = 3 * Math.ceil(mean);
+        while ((p < r) && (m < mBound)) {
             m++;
-            p += stirlingCoeff / Math.sqrt(m) * Math.pow(stirlingValue / m, m);
+            p += STIRLING_COEFF / Math.sqrt(m) * Math.pow(stirlingValue / m, m);
         }
         return m;
     }

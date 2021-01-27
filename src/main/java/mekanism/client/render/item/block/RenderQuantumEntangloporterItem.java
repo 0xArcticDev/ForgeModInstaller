@@ -1,26 +1,33 @@
 package mekanism.client.render.item.block;
 
-import com.mojang.blaze3d.matrix.MatrixStack;
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.math.Vector3f;
 import javax.annotation.Nonnull;
 import mekanism.client.model.ModelQuantumEntangloporter;
-import net.minecraft.client.renderer.IRenderTypeBuffer;
-import net.minecraft.client.renderer.model.ItemCameraTransforms.TransformType;
-import net.minecraft.client.renderer.tileentity.ItemStackTileEntityRenderer;
-import net.minecraft.item.ItemStack;
-import net.minecraft.util.math.vector.Vector3f;
+import mekanism.client.render.item.MekanismISTER;
+import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.block.model.ItemTransforms.TransformType;
+import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.world.item.ItemStack;
 
-public class RenderQuantumEntangloporterItem extends ItemStackTileEntityRenderer {
+public class RenderQuantumEntangloporterItem extends MekanismISTER {
 
-    private static final ModelQuantumEntangloporter quantumEntangloporter = new ModelQuantumEntangloporter();
+    public static final RenderQuantumEntangloporterItem RENDERER = new RenderQuantumEntangloporterItem();
+    private ModelQuantumEntangloporter quantumEntangloporter;
 
     @Override
-    public void func_239207_a_(@Nonnull ItemStack stack, @Nonnull TransformType transformType, @Nonnull MatrixStack matrix, @Nonnull IRenderTypeBuffer renderer, int light, int overlayLight) {
-        matrix.push();
+    public void onResourceManagerReload(@Nonnull ResourceManager resourceManager) {
+        quantumEntangloporter = new ModelQuantumEntangloporter(getEntityModels());
+    }
+
+    @Override
+    public void renderByItem(@Nonnull ItemStack stack, @Nonnull TransformType transformType, @Nonnull PoseStack matrix, @Nonnull MultiBufferSource renderer, int light, int overlayLight) {
+        matrix.pushPose();
         matrix.translate(0.5, 0.5, 0.5);
-        matrix.rotate(Vector3f.ZP.rotationDegrees(180));
+        matrix.mulPose(Vector3f.ZP.rotationDegrees(180));
         matrix.translate(0, -1, 0);
         //TODO: Try to get the main part rendering based on the json model instead
-        quantumEntangloporter.render(matrix, renderer, light, overlayLight, true, stack.hasEffect());
-        matrix.pop();
+        quantumEntangloporter.render(matrix, renderer, light, overlayLight, true, stack.hasFoil());
+        matrix.popPose();
     }
 }

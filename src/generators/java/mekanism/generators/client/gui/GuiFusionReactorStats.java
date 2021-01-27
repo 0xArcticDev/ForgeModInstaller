@@ -1,8 +1,7 @@
 package mekanism.generators.client.gui;
 
-import com.mojang.blaze3d.matrix.MatrixStack;
-import java.text.NumberFormat;
-import java.util.Arrays;
+import com.mojang.blaze3d.vertex.PoseStack;
+import java.util.List;
 import javax.annotation.Nonnull;
 import mekanism.api.text.EnumColor;
 import mekanism.client.gui.element.tab.GuiEnergyTab;
@@ -11,37 +10,36 @@ import mekanism.common.inventory.container.tile.EmptyTileContainer;
 import mekanism.common.util.MekanismUtils;
 import mekanism.common.util.UnitDisplayUtils.TemperatureUnit;
 import mekanism.common.util.text.EnergyDisplay;
+import mekanism.common.util.text.TextUtils;
 import mekanism.generators.client.gui.element.GuiFusionReactorTab;
 import mekanism.generators.client.gui.element.GuiFusionReactorTab.FusionReactorTab;
 import mekanism.generators.common.GeneratorsLang;
 import mekanism.generators.common.content.fusion.FusionReactorMultiblockData;
 import mekanism.generators.common.tile.fusion.TileEntityFusionReactorController;
-import net.minecraft.entity.player.PlayerInventory;
-import net.minecraft.util.text.ITextComponent;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.player.Inventory;
 
 public class GuiFusionReactorStats extends GuiFusionReactorInfo {
 
-    private static final NumberFormat nf = NumberFormat.getIntegerInstance();
-
-    public GuiFusionReactorStats(EmptyTileContainer<TileEntityFusionReactorController> container, PlayerInventory inv, ITextComponent title) {
+    public GuiFusionReactorStats(EmptyTileContainer<TileEntityFusionReactorController> container, Inventory inv, Component title) {
         super(container, inv, title);
     }
 
     @Override
-    public void init() {
-        super.init();
-        addButton(new GuiEnergyTab(() -> {
+    protected void addGuiElements() {
+        super.addGuiElements();
+        addRenderableWidget(new GuiEnergyTab(this, () -> {
             FusionReactorMultiblockData multiblock = tile.getMultiblock();
-            return Arrays.asList(MekanismLang.STORING.translate(EnergyDisplay.of(multiblock.energyContainer.getEnergy(), multiblock.energyContainer.getMaxEnergy())),
+            return List.of(MekanismLang.STORING.translate(EnergyDisplay.of(multiblock.energyContainer)),
                   GeneratorsLang.PRODUCING_AMOUNT.translate(EnergyDisplay.of(multiblock.getPassiveGeneration(false, true))));
-        }, this));
-        addButton(new GuiFusionReactorTab(this, tile, FusionReactorTab.HEAT));
-        addButton(new GuiFusionReactorTab(this, tile, FusionReactorTab.FUEL));
+        }));
+        addRenderableWidget(new GuiFusionReactorTab(this, tile, FusionReactorTab.HEAT));
+        addRenderableWidget(new GuiFusionReactorTab(this, tile, FusionReactorTab.FUEL));
     }
 
     @Override
-    protected void drawForegroundText(@Nonnull MatrixStack matrix, int mouseX, int mouseY) {
-        drawTitleText(matrix, GeneratorsLang.FUSION_REACTOR.translate(), titleY);
+    protected void drawForegroundText(@Nonnull PoseStack matrix, int mouseX, int mouseY) {
+        renderTitleText(matrix);
         FusionReactorMultiblockData multiblock = tile.getMultiblock();
         if (multiblock.isFormed()) {
             drawString(matrix, GeneratorsLang.REACTOR_PASSIVE.translateColored(EnumColor.DARK_GREEN), 6, 26, titleTextColor());
@@ -65,7 +63,8 @@ public class GuiFusionReactorStats extends GuiFusionReactorInfo {
                   TemperatureUnit.KELVIN, true)), 16, 132, titleTextColor(), 156);
             drawTextScaledBound(matrix, GeneratorsLang.REACTOR_PASSIVE_RATE.translate(EnergyDisplay.of(multiblock.getPassiveGeneration(true, false))),
                   16, 142, titleTextColor(), 156);
-            drawTextScaledBound(matrix, GeneratorsLang.REACTOR_STEAM_PRODUCTION.translate(nf.format(multiblock.getSteamPerTick(false))), 16, 152, titleTextColor(), 156);
+            drawTextScaledBound(matrix, GeneratorsLang.REACTOR_STEAM_PRODUCTION.translate(TextUtils.format(multiblock.getSteamPerTick(false))),
+                  16, 152, titleTextColor(), 156);
         }
         super.drawForegroundText(matrix, mouseX, mouseY);
     }

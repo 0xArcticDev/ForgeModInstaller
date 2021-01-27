@@ -16,15 +16,16 @@ import mekanism.common.content.network.transmitter.ThermodynamicConductor;
 import mekanism.common.lib.transmitter.ConnectionType;
 import mekanism.common.registries.MekanismBlocks;
 import mekanism.common.util.WorldUtils;
-import net.minecraft.block.BlockState;
-import net.minecraft.util.Direction;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.level.block.state.BlockState;
 
 public class TileEntityThermodynamicConductor extends TileEntityTransmitter {
 
     private final HeatHandlerManager heatHandlerManager;
 
-    public TileEntityThermodynamicConductor(IBlockProvider blockProvider) {
-        super(blockProvider);
+    public TileEntityThermodynamicConductor(IBlockProvider blockProvider, BlockPos pos, BlockState state) {
+        super(blockProvider, pos, state);
         addCapabilityResolver(heatHandlerManager = new HeatHandlerManager(direction -> {
             ThermodynamicConductor conductor = getTransmitter();
             if (direction != null && conductor.getConnectionTypeRaw(direction) == ConnectionType.NONE) {
@@ -63,29 +64,25 @@ public class TileEntityThermodynamicConductor extends TileEntityTransmitter {
     @Nonnull
     @Override
     protected BlockState upgradeResult(@Nonnull BlockState current, @Nonnull BaseTier tier) {
-        switch (tier) {
-            case BASIC:
-                return BlockStateHelper.copyStateData(current, MekanismBlocks.BASIC_THERMODYNAMIC_CONDUCTOR.getBlock().getDefaultState());
-            case ADVANCED:
-                return BlockStateHelper.copyStateData(current, MekanismBlocks.ADVANCED_THERMODYNAMIC_CONDUCTOR.getBlock().getDefaultState());
-            case ELITE:
-                return BlockStateHelper.copyStateData(current, MekanismBlocks.ELITE_THERMODYNAMIC_CONDUCTOR.getBlock().getDefaultState());
-            case ULTIMATE:
-                return BlockStateHelper.copyStateData(current, MekanismBlocks.ULTIMATE_THERMODYNAMIC_CONDUCTOR.getBlock().getDefaultState());
-        }
-        return current;
+        return switch (tier) {
+            case BASIC -> BlockStateHelper.copyStateData(current, MekanismBlocks.BASIC_THERMODYNAMIC_CONDUCTOR);
+            case ADVANCED -> BlockStateHelper.copyStateData(current, MekanismBlocks.ADVANCED_THERMODYNAMIC_CONDUCTOR);
+            case ELITE -> BlockStateHelper.copyStateData(current, MekanismBlocks.ELITE_THERMODYNAMIC_CONDUCTOR);
+            case ULTIMATE -> BlockStateHelper.copyStateData(current, MekanismBlocks.ULTIMATE_THERMODYNAMIC_CONDUCTOR);
+            default -> current;
+        };
     }
 
     @Override
     public void sideChanged(@Nonnull Direction side, @Nonnull ConnectionType old, @Nonnull ConnectionType type) {
         super.sideChanged(side, old, type);
         if (type == ConnectionType.NONE) {
-            invalidateCapability(Capabilities.HEAT_HANDLER_CAPABILITY, side);
+            invalidateCapability(Capabilities.HEAT_HANDLER, side);
             //Notify the neighbor on that side our state changed and we no longer have a capability
-            WorldUtils.notifyNeighborOfChange(world, side, pos);
+            WorldUtils.notifyNeighborOfChange(level, side, worldPosition);
         } else if (old == ConnectionType.NONE) {
-            //Notify the neighbor on that side our state changed and we now do have a capability
-            WorldUtils.notifyNeighborOfChange(world, side, pos);
+            //Notify the neighbor on that side our state changed, and we now do have a capability
+            WorldUtils.notifyNeighborOfChange(level, side, worldPosition);
         }
     }
 }

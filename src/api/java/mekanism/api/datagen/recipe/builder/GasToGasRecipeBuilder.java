@@ -3,14 +3,14 @@ package mekanism.api.datagen.recipe.builder;
 import com.google.gson.JsonObject;
 import javax.annotation.Nonnull;
 import javax.annotation.ParametersAreNonnullByDefault;
-import mcp.MethodsReturnNonnullByDefault;
 import mekanism.api.JsonConstants;
 import mekanism.api.SerializerHelper;
 import mekanism.api.annotations.FieldsAreNonnullByDefault;
 import mekanism.api.chemical.gas.GasStack;
 import mekanism.api.datagen.recipe.MekanismRecipeBuilder;
-import mekanism.api.recipes.inputs.chemical.GasStackIngredient;
-import net.minecraft.util.ResourceLocation;
+import mekanism.api.recipes.ingredients.ChemicalStackIngredient.GasStackIngredient;
+import net.minecraft.MethodsReturnNonnullByDefault;
+import net.minecraft.resources.ResourceLocation;
 
 @FieldsAreNonnullByDefault
 @ParametersAreNonnullByDefault
@@ -26,6 +26,12 @@ public class GasToGasRecipeBuilder extends MekanismRecipeBuilder<GasToGasRecipeB
         this.output = output;
     }
 
+    /**
+     * Creates an Activating recipe builder.
+     *
+     * @param input  Input.
+     * @param output Output.
+     */
     public static GasToGasRecipeBuilder activating(GasStackIngredient input, GasStack output) {
         if (output.isEmpty()) {
             throw new IllegalArgumentException("This solar neutron activator recipe requires a non empty gas output.");
@@ -33,6 +39,12 @@ public class GasToGasRecipeBuilder extends MekanismRecipeBuilder<GasToGasRecipeB
         return new GasToGasRecipeBuilder(input, output, mekSerializer("activating"));
     }
 
+    /**
+     * Creates a Centrifuging recipe builder.
+     *
+     * @param input  Input.
+     * @param output Output.
+     */
     public static GasToGasRecipeBuilder centrifuging(GasStackIngredient input, GasStack output) {
         if (output.isEmpty()) {
             throw new IllegalArgumentException("This Isotopic Centrifuge recipe requires a non empty gas output.");
@@ -52,7 +64,7 @@ public class GasToGasRecipeBuilder extends MekanismRecipeBuilder<GasToGasRecipeB
         }
 
         @Override
-        public void serialize(@Nonnull JsonObject json) {
+        public void serializeRecipeData(@Nonnull JsonObject json) {
             json.add(JsonConstants.INPUT, input.serialize());
             json.add(JsonConstants.OUTPUT, SerializerHelper.serializeGasStack(output));
         }

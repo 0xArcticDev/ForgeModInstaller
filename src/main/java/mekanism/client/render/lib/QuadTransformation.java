@@ -1,26 +1,25 @@
 package mekanism.client.render.lib;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Predicate;
 import mekanism.common.lib.Color;
 import mekanism.common.lib.math.Quaternion;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
-import net.minecraft.util.Direction;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.math.vector.Vector3d;
+import net.minecraft.core.Direction;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.phys.Vec3;
 
 public interface QuadTransformation {
 
     // down up north south west east
-    Direction[][] ROTATION_MATRIX = new Direction[][]{{Direction.SOUTH, Direction.NORTH, Direction.DOWN, Direction.DOWN, Direction.DOWN, Direction.DOWN},
-                                                      {Direction.NORTH, Direction.SOUTH, Direction.UP, Direction.UP, Direction.UP, Direction.UP},
-                                                      {Direction.DOWN, Direction.UP, Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST},
-                                                      {Direction.UP, Direction.DOWN, Direction.SOUTH, Direction.NORTH, Direction.EAST, Direction.WEST},
-                                                      {Direction.WEST, Direction.WEST, Direction.WEST, Direction.EAST, Direction.SOUTH, Direction.NORTH},
-                                                      {Direction.EAST, Direction.EAST, Direction.EAST, Direction.WEST, Direction.NORTH, Direction.SOUTH}};
+    Direction[][] ROTATION_MATRIX = {{Direction.SOUTH, Direction.NORTH, Direction.DOWN, Direction.DOWN, Direction.DOWN, Direction.DOWN},
+                                     {Direction.NORTH, Direction.SOUTH, Direction.UP, Direction.UP, Direction.UP, Direction.UP},
+                                     {Direction.DOWN, Direction.UP, Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST},
+                                     {Direction.UP, Direction.DOWN, Direction.SOUTH, Direction.NORTH, Direction.EAST, Direction.WEST},
+                                     {Direction.WEST, Direction.WEST, Direction.WEST, Direction.EAST, Direction.SOUTH, Direction.NORTH},
+                                     {Direction.EAST, Direction.EAST, Direction.EAST, Direction.WEST, Direction.NORTH, Direction.SOUTH}};
 
     QuadTransformation identity = q -> {
     };
@@ -36,7 +35,7 @@ public interface QuadTransformation {
         return new LightTransformation(light, light);
     }
 
-    static QuadTransformation translate(Vector3d translation) {
+    static QuadTransformation translate(Vec3 translation) {
         return new TranslationTransformation(translation);
     }
 
@@ -44,20 +43,14 @@ public interface QuadTransformation {
         if (side == null) {
             return identity;
         }
-        switch (side) {
-            case UP:
-                return rotate(90, 0, 0);
-            case DOWN:
-                return rotate(-90, 0, 0);
-            case WEST:
-                return rotate(0, 90, 0);
-            case EAST:
-                return rotate(0, -90, 0);
-            case SOUTH:
-                return rotate(0, 180, 0);
-            default:
-                return identity;
-        }
+        return switch (side) {
+            case UP -> rotate(90, 0, 0);
+            case DOWN -> rotate(-90, 0, 0);
+            case WEST -> rotate(0, 90, 0);
+            case EAST -> rotate(0, -90, 0);
+            case SOUTH -> rotate(0, 180, 0);
+            default -> identity;
+        };
     }
 
     static QuadTransformation rotateY(double degrees) {
@@ -94,26 +87,25 @@ public interface QuadTransformation {
 
         private final Direction side;
 
-        public SideTransformation(Direction side) {
+        protected SideTransformation(Direction side) {
             this.side = side;
         }
 
         @Override
         public void transform(Quad quad) {
-            if (side == null) {
-                return;
+            if (side != null) {
+                quad.setSide(ROTATION_MATRIX[quad.getSide().ordinal()][side.ordinal()]);
             }
-            quad.setSide(ROTATION_MATRIX[quad.getSide().ordinal()][side.ordinal()]);
         }
 
         @Override
-        public boolean equals(Object other) {
-            return other instanceof SideTransformation && side == ((SideTransformation) other).side;
+        public boolean equals(Object o) {
+            return o instanceof SideTransformation other && side == other.side;
         }
 
         @Override
         public int hashCode() {
-            return side != null ? side.hashCode() : -1;
+            return side == null ? -1 : side.hashCode();
         }
     }
 
@@ -121,7 +113,7 @@ public interface QuadTransformation {
 
         private final Color color;
 
-        public ColorTransformation(Color color) {
+        protected ColorTransformation(Color color) {
             this.color = color;
         }
 
@@ -131,8 +123,8 @@ public interface QuadTransformation {
         }
 
         @Override
-        public boolean equals(Object other) {
-            return other instanceof ColorTransformation && color.equals(((ColorTransformation) other).color);
+        public boolean equals(Object o) {
+            return o instanceof ColorTransformation other && color.equals(other.color);
         }
 
         @Override
@@ -157,8 +149,8 @@ public interface QuadTransformation {
         }
 
         @Override
-        public boolean equals(Object other) {
-            return other instanceof LightTransformation && lightU == ((LightTransformation) other).lightU && lightV == ((LightTransformation) other).lightV;
+        public boolean equals(Object o) {
+            return o instanceof LightTransformation other && lightU == other.lightU && lightV == other.lightV;
         }
 
         @Override
@@ -174,7 +166,7 @@ public interface QuadTransformation {
 
         private final Quaternion quaternion;
 
-        public RotationTransformation(Quaternion quaternion) {
+        protected RotationTransformation(Quaternion quaternion) {
             this.quaternion = quaternion;
         }
 
@@ -186,13 +178,13 @@ public interface QuadTransformation {
             });
         }
 
-        private static Vector3d round(Vector3d vec) {
-            return new Vector3d(Math.round(vec.x * EPSILON) / EPSILON, Math.round(vec.y * EPSILON) / EPSILON, Math.round(vec.z * EPSILON) / EPSILON);
+        private static Vec3 round(Vec3 vec) {
+            return new Vec3(Math.round(vec.x * EPSILON) / EPSILON, Math.round(vec.y * EPSILON) / EPSILON, Math.round(vec.z * EPSILON) / EPSILON);
         }
 
         @Override
-        public boolean equals(Object other) {
-            return other instanceof RotationTransformation && quaternion.equals(((RotationTransformation) other).quaternion);
+        public boolean equals(Object o) {
+            return o instanceof RotationTransformation other && quaternion.equals(other.quaternion);
         }
 
         @Override
@@ -203,9 +195,9 @@ public interface QuadTransformation {
 
     class TranslationTransformation implements QuadTransformation {
 
-        private final Vector3d translation;
+        private final Vec3 translation;
 
-        public TranslationTransformation(Vector3d translation) {
+        protected TranslationTransformation(Vec3 translation) {
             this.translation = translation;
         }
 
@@ -215,8 +207,8 @@ public interface QuadTransformation {
         }
 
         @Override
-        public boolean equals(Object other) {
-            return other instanceof TranslationTransformation && translation.equals(((TranslationTransformation) other).translation);
+        public boolean equals(Object o) {
+            return o instanceof TranslationTransformation other && translation.equals(other.translation);
         }
 
         @Override
@@ -229,7 +221,7 @@ public interface QuadTransformation {
 
         private final TextureAtlasSprite texture;
 
-        public TextureTransformation(TextureAtlasSprite texture) {
+        protected TextureTransformation(TextureAtlasSprite texture) {
             this.texture = texture;
         }
 
@@ -243,13 +235,13 @@ public interface QuadTransformation {
         }
 
         @Override
-        public boolean equals(Object other) {
-            return other instanceof TextureTransformation && texture == ((TextureTransformation) other).texture;
+        public boolean equals(Object o) {
+            return o instanceof TextureTransformation other && texture == other.texture;
         }
 
         @Override
         public int hashCode() {
-            return texture != null ? texture.hashCode() : -1;
+            return texture == null ? -1 : texture.hashCode();
         }
     }
 
@@ -258,7 +250,7 @@ public interface QuadTransformation {
         private final QuadTransformation original;
         private final Predicate<ResourceLocation> verifier;
 
-        public TextureFilteredTransformation(QuadTransformation original, Predicate<ResourceLocation> verifier) {
+        protected TextureFilteredTransformation(QuadTransformation original, Predicate<ResourceLocation> verifier) {
             this.original = original;
             this.verifier = verifier;
         }
@@ -275,8 +267,8 @@ public interface QuadTransformation {
         }
 
         @Override
-        public boolean equals(Object other) {
-            return other instanceof TextureFilteredTransformation && verifier.equals(((TextureFilteredTransformation) other).verifier);
+        public boolean equals(Object o) {
+            return o instanceof TextureFilteredTransformation other && verifier.equals(other.verifier);
         }
 
         @Override
@@ -290,13 +282,13 @@ public interface QuadTransformation {
         private final List<QuadTransformation> list;
         private final int hashCode;
 
-        public TransformationList(List<QuadTransformation> list) {
+        protected TransformationList(List<QuadTransformation> list) {
             this.list = list;
             hashCode = list.hashCode();
         }
 
         public static TransformationList of(QuadTransformation... trans) {
-            return new TransformationList(Arrays.asList(trans));
+            return new TransformationList(List.of(trans));
         }
 
         @Override
@@ -305,8 +297,8 @@ public interface QuadTransformation {
         }
 
         @Override
-        public boolean equals(Object other) {
-            return other instanceof TransformationList && list.equals(((TransformationList) other).list);
+        public boolean equals(Object o) {
+            return o instanceof TransformationList other && list.equals(other.list);
         }
 
         @Override

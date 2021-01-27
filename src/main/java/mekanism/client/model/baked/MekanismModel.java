@@ -10,6 +10,7 @@ import com.mojang.datafixers.util.Pair;
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 import java.util.Collection;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -17,20 +18,20 @@ import java.util.function.Function;
 import javax.annotation.Nonnull;
 import mekanism.client.render.lib.Quad;
 import mekanism.client.render.lib.QuadTransformation;
-import net.minecraft.client.renderer.model.BakedQuad;
-import net.minecraft.client.renderer.model.BlockModel;
-import net.minecraft.client.renderer.model.BlockPart;
-import net.minecraft.client.renderer.model.BlockPartFace;
-import net.minecraft.client.renderer.model.IModelTransform;
-import net.minecraft.client.renderer.model.IUnbakedModel;
-import net.minecraft.client.renderer.model.ModelBakery;
-import net.minecraft.client.renderer.model.RenderMaterial;
-import net.minecraft.client.renderer.texture.MissingTextureSprite;
+import net.minecraft.client.renderer.block.model.BakedQuad;
+import net.minecraft.client.renderer.block.model.BlockElement;
+import net.minecraft.client.renderer.block.model.BlockElementFace;
+import net.minecraft.client.renderer.block.model.BlockModel;
+import net.minecraft.client.renderer.texture.MissingTextureAtlasSprite;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
-import net.minecraft.resources.IResourceManager;
-import net.minecraft.util.Direction;
-import net.minecraft.util.JSONUtils;
-import net.minecraft.util.ResourceLocation;
+import net.minecraft.client.resources.model.Material;
+import net.minecraft.client.resources.model.ModelBakery;
+import net.minecraft.client.resources.model.ModelState;
+import net.minecraft.client.resources.model.UnbakedModel;
+import net.minecraft.core.Direction;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.util.GsonHelper;
 import net.minecraftforge.client.model.IModelBuilder;
 import net.minecraftforge.client.model.IModelConfiguration;
 import net.minecraftforge.client.model.IModelLoader;
@@ -49,27 +50,31 @@ public class MekanismModel implements IMultipartModelGeometry<MekanismModel> {
 
         public static final Loader INSTANCE = new Loader();
 
-        private Loader() {
+        protected Loader() {
         }
 
         @Override
-        public void onResourceManagerReload(@Nonnull IResourceManager resourceManager) {
+        public void onResourceManagerReload(@Nonnull ResourceManager resourceManager) {
         }
 
         @Nonnull
         @Override
-        public MekanismModel read(@Nonnull JsonDeserializationContext ctx, JsonObject modelContents) {
+        public MekanismModel read(@Nonnull JsonDeserializationContext ctx, @Nonnull JsonObject modelContents) {
+            return new MekanismModel(readElements(ctx, modelContents));
+        }
+
+        protected static Multimap<String, BlockPartWrapper> readElements(@Nonnull JsonDeserializationContext ctx, @Nonnull JsonObject modelContents) {
             Multimap<String, BlockPartWrapper> multimap = HashMultimap.create();
             if (modelContents.has("elements")) {
-                for (JsonElement element : JSONUtils.getJsonArray(modelContents, "elements")) {
+                for (JsonElement element : GsonHelper.getAsJsonArray(modelContents, "elements")) {
                     JsonObject obj = element.getAsJsonObject();
-                    BlockPart part = ctx.deserialize(element, BlockPart.class);
+                    BlockElement part = ctx.deserialize(element, BlockElement.class);
                     String name = obj.has("name") ? obj.get("name").getAsString() : "undefined";
                     BlockPartWrapper wrapper = new BlockPartWrapper(name, part);
                     multimap.put(name, wrapper);
 
                     if (obj.has("faces")) {
-                        JsonObject faces = obj.get("faces").getAsJsonObject();
+                        JsonObject faces = obj.getAsJsonObject("faces");
                         faces.entrySet().forEach(e -> {
                             Direction side = Direction.byName(e.getKey());
                             if (side == null) {
@@ -84,23 +89,23 @@ public class MekanismModel implements IMultipartModelGeometry<MekanismModel> {
                     }
                 }
             }
-            return new MekanismModel(multimap);
+            return multimap;
         }
     }
 
     public static class BlockPartWrapper implements IModelGeometryPart {
 
         private final String name;
-        private final BlockPart blockPart;
+        private final BlockElement blockPart;
 
-        private final Object2IntMap<BlockPartFace> litFaceMap = new Object2IntOpenHashMap<>();
+        private final Object2IntMap<BlockElementFace> litFaceMap = new Object2IntOpenHashMap<>();
 
-        public BlockPartWrapper(String name, BlockPart blockPart) {
+        public BlockPartWrapper(String name, BlockElement blockPart) {
             this.name = name;
             this.blockPart = blockPart;
         }
 
-        public BlockPart getPart() {
+        public BlockElement getPart() {
             return blockPart;
         }
 
@@ -110,33 +115,33 @@ public class MekanismModel implements IMultipartModelGeometry<MekanismModel> {
         }
 
         public void light(Direction side, int light) {
-            litFaceMap.put(blockPart.mapFaces.get(side), light);
+            litFaceMap.put(blockPart.faces.get(side), light);
         }
 
         @Override
-        public void addQuads(IModelConfiguration owner, IModelBuilder<?> modelBuilder, ModelBakery bakery, Function<RenderMaterial, TextureAtlasSprite> spriteGetter, IModelTransform modelTransform,
+        public void addQuads(IModelConfiguration owner, IModelBuilder<?> modelBuilder, ModelBakery bakery, Function<Material, TextureAtlasSprite> spriteGetter, ModelState modelTransform,
               ResourceLocation modelLocation) {
-            for (Direction direction : blockPart.mapFaces.keySet()) {
-                BlockPartFace face = blockPart.mapFaces.get(direction);
+            for (Map.Entry<Direction, BlockElementFace> entry : blockPart.faces.entrySet()) {
+                BlockElementFace face = entry.getValue();
                 TextureAtlasSprite sprite = spriteGetter.apply(owner.resolveTexture(face.texture));
-                BakedQuad quad = BlockModel.makeBakedQuad(blockPart, face, sprite, direction, modelTransform, modelLocation);
+                BakedQuad quad = BlockModel.makeBakedQuad(blockPart, face, sprite, entry.getKey(), modelTransform, modelLocation);
                 if (litFaceMap.containsKey(face)) {
                     quad = new Quad(quad).transform(QuadTransformation.light(litFaceMap.getInt(face) / 15F)).bake();
                 }
-                if (face.cullFace == null) {
+                if (face.cullForDirection == null) {
                     modelBuilder.addGeneralQuad(quad);
                 } else {
-                    modelBuilder.addFaceQuad(modelTransform.getRotation().rotateTransform(face.cullFace), quad);
+                    modelBuilder.addFaceQuad(modelTransform.getRotation().rotateTransform(face.cullForDirection), quad);
                 }
             }
         }
 
         @Override
-        public Collection<RenderMaterial> getTextures(IModelConfiguration owner, Function<ResourceLocation, IUnbakedModel> modelGetter, Set<Pair<String, String>> missingTextureErrors) {
-            Set<RenderMaterial> textures = Sets.newHashSet();
-            for (BlockPartFace face : blockPart.mapFaces.values()) {
-                RenderMaterial texture = owner.resolveTexture(face.texture);
-                if (Objects.equals(texture.getTextureLocation(), MissingTextureSprite.getLocation())) {
+        public Collection<Material> getTextures(IModelConfiguration owner, Function<ResourceLocation, UnbakedModel> modelGetter, Set<Pair<String, String>> missingTextureErrors) {
+            Set<Material> textures = Sets.newHashSet();
+            for (BlockElementFace face : blockPart.faces.values()) {
+                Material texture = owner.resolveTexture(face.texture);
+                if (Objects.equals(texture.texture(), MissingTextureAtlasSprite.getLocation())) {
                     missingTextureErrors.add(Pair.of(face.texture, owner.getModelName()));
                 }
                 textures.add(texture);

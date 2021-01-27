@@ -17,15 +17,15 @@ import mekanism.common.lib.multiblock.IValveHandler.ValveData;
 import mekanism.common.lib.multiblock.Structure.Axis;
 import mekanism.common.lib.multiblock.StructureHelper;
 import mekanism.common.registries.MekanismBlockTypes;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.chunk.IChunk;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.ChunkAccess;
 
 public class SPSValidator extends CuboidStructureValidator<SPSMultiblockData> {
 
     private static final VoxelCuboid BOUNDS = new VoxelCuboid(7, 7, 7);
-    private static final byte[][] ALLOWED_GRID = new byte[][]{
+    private static final byte[][] ALLOWED_GRID = {
           {0, 0, 1, 1, 1, 0, 0},
           {0, 1, 2, 2, 2, 1, 0},
           {1, 2, 2, 2, 2, 2, 1},
@@ -41,6 +41,7 @@ public class SPSValidator extends CuboidStructureValidator<SPSMultiblockData> {
         if (relative.isWall()) {
             Axis axis = Axis.get(cuboid.getSide(pos));
             Axis h = axis.horizontal(), v = axis.vertical();
+            //Note: This ends up becoming immutable by doing this but that is fine and doesn't really matter
             pos = pos.subtract(cuboid.getMinPos());
             return StructureRequirement.REQUIREMENTS[ALLOWED_GRID[h.getCoord(pos)][v.getCoord(pos)]];
         }
@@ -48,7 +49,7 @@ public class SPSValidator extends CuboidStructureValidator<SPSMultiblockData> {
     }
 
     @Override
-    protected CasingType getCasingType(BlockPos pos, BlockState state) {
+    protected CasingType getCasingType(BlockState state) {
         Block block = state.getBlock();
         if (BlockType.is(block, MekanismBlockTypes.SPS_CASING)) {
             return CasingType.FRAME;
@@ -59,7 +60,7 @@ public class SPSValidator extends CuboidStructureValidator<SPSMultiblockData> {
     }
 
     @Override
-    protected boolean validateInner(BlockState state, Long2ObjectMap<IChunk> chunkMap, BlockPos pos) {
+    protected boolean validateInner(BlockState state, Long2ObjectMap<ChunkAccess> chunkMap, BlockPos pos) {
         if (super.validateInner(state, chunkMap, pos)) {
             return true;
         }
@@ -74,17 +75,18 @@ public class SPSValidator extends CuboidStructureValidator<SPSMultiblockData> {
     }
 
     @Override
-    public FormationResult postcheck(SPSMultiblockData structure, Set<BlockPos> innerNodes, Long2ObjectMap<IChunk> chunkMap) {
+    public FormationResult postcheck(SPSMultiblockData structure, Long2ObjectMap<ChunkAccess> chunkMap) {
         Set<BlockPos> validCoils = new ObjectOpenHashSet<>();
         for (ValveData valve : structure.valves) {
-            BlockPos pos = valve.location.offset(valve.side.getOpposite());
-            if (innerNodes.contains(pos)) {
+            BlockPos pos = valve.location.relative(valve.side.getOpposite());
+            if (structure.internalLocations.contains(pos)) {
                 structure.addCoil(valve.location, valve.side.getOpposite());
                 validCoils.add(pos);
             }
         }
         // fail if there's a coil not connected to a port
-        if (innerNodes.stream().anyMatch(coil -> !validCoils.contains(coil))) {
+        // Note: As we only support coils as internal multiblocks for the SPS we can just compare the size of the sets
+        if (structure.internalLocations.size() != validCoils.size()) {
             return FormationResult.fail(MekanismLang.SPS_INVALID_DISCONNECTED_COIL);
         }
         return FormationResult.SUCCESS;

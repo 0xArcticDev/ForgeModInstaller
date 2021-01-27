@@ -9,10 +9,11 @@ out
 Mekanism*.jar
 MDK.zip
 /run
+/runGameTests
 /.gradle
 *.classpath
 *.project
-/.settings
+.settings
 /eclipse
 *.txt
 *.launch
@@ -21,6 +22,10 @@ MDK.zip
 *.blend2
 /bin
 /logs
-
-# datagen caches
-/src/datagen/generated/**/.cache
+/src/datagen/*/resources
+/src/datagen/*/annotation_generated
+!/src/datagen/main/resources/PersistingMekanismDatagenCache.js
+!/src/datagen/main/resources/SkipResourcePackFilter.js
+!/src/datagen/main/resources/META-INF/coremods.json
+/annotation-processor/bin
+libs/

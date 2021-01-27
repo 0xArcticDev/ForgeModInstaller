@@ -6,28 +6,30 @@ import mekanism.common.content.evaporation.EvaporationMultiblockData;
 import mekanism.common.lib.multiblock.MultiblockManager;
 import mekanism.common.registries.MekanismBlocks;
 import mekanism.common.tile.prefab.TileEntityMultiblock;
-import net.minecraft.block.Block;
-import net.minecraft.util.math.BlockPos;
+import mekanism.common.util.WorldUtils;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
 
 public class TileEntityThermalEvaporationBlock extends TileEntityMultiblock<EvaporationMultiblockData> {
 
-    public TileEntityThermalEvaporationBlock() {
-        this(MekanismBlocks.THERMAL_EVAPORATION_BLOCK);
+    public TileEntityThermalEvaporationBlock(BlockPos pos, BlockState state) {
+        this(MekanismBlocks.THERMAL_EVAPORATION_BLOCK, pos, state);
     }
 
-    public TileEntityThermalEvaporationBlock(IBlockProvider provider) {
-        super(provider);
+    public TileEntityThermalEvaporationBlock(IBlockProvider provider, BlockPos pos, BlockState state) {
+        super(provider, pos, state);
     }
 
     @Override
     public void onNeighborChange(Block block, BlockPos neighborPos) {
         super.onNeighborChange(block, neighborPos);
-        if (!isRemote()) {
+        //As corners must always be evap blocks except on the top row we can reduce duplicate update checks by only doing this if it is above
+        if (!isRemote() && WorldUtils.sideDifference(worldPosition, neighborPos) == Direction.DOWN) {
             EvaporationMultiblockData multiblock = getMultiblock();
             if (multiblock.isFormed()) {
-                if (multiblock.isSolarSpot(neighborPos)) {
-                    multiblock.updateSolars(getWorld());
-                }
+                multiblock.updateSolarSpot(getLevel(), neighborPos);
             }
         }
     }
@@ -40,5 +42,10 @@ public class TileEntityThermalEvaporationBlock extends TileEntityMultiblock<Evap
     @Override
     public MultiblockManager<EvaporationMultiblockData> getManager() {
         return Mekanism.evaporationManager;
+    }
+
+    @Override
+    public boolean canBeMaster() {
+        return false;
     }
 }

@@ -1,18 +1,18 @@
 package mekanism.client.render.lib;
 
+import com.mojang.blaze3d.vertex.VertexFormat;
+import com.mojang.blaze3d.vertex.VertexFormatElement;
 import mekanism.common.lib.Color;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
-import net.minecraft.client.renderer.vertex.VertexFormat;
-import net.minecraft.client.renderer.vertex.VertexFormatElement;
-import net.minecraft.util.math.vector.Vector3d;
+import net.minecraft.world.phys.Vec3;
 
 public class Vertex {
 
     // I'm not sure why Forge packs light this way but w/e
     private static final float LIGHT_PACK_FACTOR = 240F / Short.MAX_VALUE;
 
-    private Vector3d pos;
-    private Vector3d normal;
+    private Vec3 pos;
+    private Vec3 normal;
 
     private Color color;
 
@@ -24,7 +24,7 @@ public class Vertex {
     public Vertex() {
     }
 
-    public Vertex(Vector3d pos, Vector3d normal, Color color, float texU, float texV, float lightU, float lightV) {
+    public Vertex(Vec3 pos, Vec3 normal, Color color, float texU, float texV, float lightU, float lightV) {
         this.pos = pos;
         this.normal = normal;
         this.color = color;
@@ -34,19 +34,19 @@ public class Vertex {
         this.lightV = lightV;
     }
 
-    public static Vertex create(Vector3d pos, Vector3d normal, Color color, TextureAtlasSprite sprite, float texU, float texV, float lightU, float lightV) {
-        return new Vertex(pos, normal, color, sprite.getInterpolatedU(texU), sprite.getInterpolatedV(texV), lightU, lightV);
+    public static Vertex create(Vec3 pos, Vec3 normal, Color color, TextureAtlasSprite sprite, float texU, float texV, float lightU, float lightV) {
+        return new Vertex(pos, normal, color, sprite.getU(texU), sprite.getV(texV), lightU, lightV);
     }
 
-    public static Vertex create(Vector3d pos, Vector3d normal, TextureAtlasSprite sprite, float u, float v) {
+    public static Vertex create(Vec3 pos, Vec3 normal, TextureAtlasSprite sprite, float u, float v) {
         return create(pos, normal, Color.WHITE, sprite, u, v, 0, 0);
     }
 
-    public Vector3d getPos() {
+    public Vec3 getPos() {
         return pos;
     }
 
-    public Vector3d getNormal() {
+    public Vec3 getNormal() {
         return normal;
     }
 
@@ -75,12 +75,12 @@ public class Vertex {
         return this;
     }
 
-    public Vertex pos(Vector3d pos) {
+    public Vertex pos(Vec3 pos) {
         this.pos = pos;
         return this;
     }
 
-    public Vertex normal(Vector3d normal) {
+    public Vertex normal(Vec3 normal) {
         this.normal = normal;
         return this;
     }
@@ -110,23 +110,23 @@ public class Vertex {
         for (int i = 0; i < format.getElements().size(); i++) {
             VertexFormatElement element = format.getElements().get(i);
             switch (element.getUsage()) {
-                case POSITION:
-                    ret[i][0] = (float) pos.getX();
-                    ret[i][1] = (float) pos.getY();
-                    ret[i][2] = (float) pos.getZ();
-                    break;
-                case NORMAL:
-                    ret[i][0] = (float) normal.getX();
-                    ret[i][1] = (float) normal.getY();
-                    ret[i][2] = (float) normal.getZ();
-                    break;
-                case COLOR:
+                case POSITION -> {
+                    ret[i][0] = (float) pos.x();
+                    ret[i][1] = (float) pos.y();
+                    ret[i][2] = (float) pos.z();
+                }
+                case NORMAL -> {
+                    ret[i][0] = (float) normal.x();
+                    ret[i][1] = (float) normal.y();
+                    ret[i][2] = (float) normal.z();
+                }
+                case COLOR -> {
                     ret[i][0] = color.rf();
                     ret[i][1] = color.gf();
                     ret[i][2] = color.bf();
                     ret[i][3] = color.af();
-                    break;
-                case UV:
+                }
+                case UV -> {
                     if (element.getIndex() == 0) {
                         ret[i][0] = texU;
                         ret[i][1] = texV;
@@ -134,9 +134,7 @@ public class Vertex {
                         ret[i][0] = lightU;
                         ret[i][1] = lightV;
                     }
-                    break;
-                default:
-                    break;
+                }
             }
         }
         return ret;

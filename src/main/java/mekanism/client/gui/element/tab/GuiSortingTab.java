@@ -1,6 +1,6 @@
 package mekanism.client.gui.element.tab;
 
-import com.mojang.blaze3d.matrix.MatrixStack;
+import com.mojang.blaze3d.vertex.PoseStack;
 import javax.annotation.Nonnull;
 import mekanism.client.SpecialColors;
 import mekanism.client.gui.IGuiWrapper;
@@ -8,8 +8,8 @@ import mekanism.client.gui.element.GuiInsetElement;
 import mekanism.client.render.MekanismRenderer;
 import mekanism.common.Mekanism;
 import mekanism.common.MekanismLang;
-import mekanism.common.network.PacketGuiInteract;
-import mekanism.common.network.PacketGuiInteract.GuiInteraction;
+import mekanism.common.network.to_server.PacketGuiInteract;
+import mekanism.common.network.to_server.PacketGuiInteract.GuiInteraction;
 import mekanism.common.tile.factory.TileEntityFactory;
 import mekanism.common.util.MekanismUtils;
 import mekanism.common.util.MekanismUtils.ResourceType;
@@ -22,15 +22,16 @@ public class GuiSortingTab extends GuiInsetElement<TileEntityFactory<?>> {
     }
 
     @Override
-    public void drawBackground(@Nonnull MatrixStack matrix, int mouseX, int mouseY, float partialTicks) {
+    public void drawBackground(@Nonnull PoseStack matrix, int mouseX, int mouseY, float partialTicks) {
         super.drawBackground(matrix, mouseX, mouseY, partialTicks);
-        drawString(matrix, OnOff.of(dataSource.isSorting()).getTextComponent(), x + 5, y + 24, titleTextColor());
+        drawTextScaledBound(matrix, OnOff.of(dataSource.isSorting()).getTextComponent(), x + 3, y + 24, titleTextColor(), 21);
         MekanismRenderer.resetColor();
     }
 
     @Override
-    public void renderToolTip(@Nonnull MatrixStack matrix, int mouseX, int mouseY) {
-        displayTooltip(matrix, MekanismLang.AUTO_SORT.translate(), mouseX, mouseY);
+    public void renderToolTip(@Nonnull PoseStack matrix, int mouseX, int mouseY) {
+        super.renderToolTip(matrix, mouseX, mouseY);
+        displayTooltips(matrix, mouseX, mouseY, MekanismLang.AUTO_SORT.translate());
     }
 
     @Override
@@ -40,6 +41,6 @@ public class GuiSortingTab extends GuiInsetElement<TileEntityFactory<?>> {
 
     @Override
     public void onClick(double mouseX, double mouseY) {
-        Mekanism.packetHandler.sendToServer(new PacketGuiInteract(GuiInteraction.AUTO_SORT_BUTTON, dataSource));
+        Mekanism.packetHandler().sendToServer(new PacketGuiInteract(GuiInteraction.AUTO_SORT_BUTTON, dataSource));
     }
 }

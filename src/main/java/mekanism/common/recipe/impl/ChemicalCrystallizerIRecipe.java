@@ -2,14 +2,14 @@ package mekanism.common.recipe.impl;
 
 import javax.annotation.Nonnull;
 import mekanism.api.recipes.ChemicalCrystallizerRecipe;
-import mekanism.api.recipes.inputs.chemical.ChemicalStackIngredient;
+import mekanism.api.recipes.ingredients.ChemicalStackIngredient;
 import mekanism.common.recipe.MekanismRecipeType;
 import mekanism.common.registries.MekanismBlocks;
 import mekanism.common.registries.MekanismRecipeSerializers;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.crafting.IRecipeSerializer;
-import net.minecraft.item.crafting.IRecipeType;
-import net.minecraft.util.ResourceLocation;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.RecipeSerializer;
+import net.minecraft.world.item.crafting.RecipeType;
 
 public class ChemicalCrystallizerIRecipe extends ChemicalCrystallizerRecipe {
 
@@ -19,14 +19,14 @@ public class ChemicalCrystallizerIRecipe extends ChemicalCrystallizerRecipe {
 
     @Nonnull
     @Override
-    public IRecipeType<ChemicalCrystallizerRecipe> getType() {
-        return MekanismRecipeType.CRYSTALLIZING;
+    public RecipeType<ChemicalCrystallizerRecipe> getType() {
+        return MekanismRecipeType.CRYSTALLIZING.get();
     }
 
     @Nonnull
     @Override
-    public IRecipeSerializer<ChemicalCrystallizerRecipe> getSerializer() {
-        return MekanismRecipeSerializers.CRYSTALLIZING.getRecipeSerializer();
+    public RecipeSerializer<ChemicalCrystallizerRecipe> getSerializer() {
+        return MekanismRecipeSerializers.CRYSTALLIZING.get();
     }
 
     @Nonnull
@@ -37,7 +37,7 @@ public class ChemicalCrystallizerIRecipe extends ChemicalCrystallizerRecipe {
 
     @Nonnull
     @Override
-    public ItemStack getIcon() {
+    public ItemStack getToastSymbol() {
         return MekanismBlocks.CHEMICAL_CRYSTALLIZER.getItemStack();
     }
 }

@@ -8,18 +8,19 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import mekanism.common.Mekanism;
 import mekanism.common.util.InventoryUtils;
-import net.minecraft.item.ItemStack;
-import net.minecraft.tileentity.TileEntity;
-import net.minecraft.util.Direction;
+import mekanism.common.util.RegistryUtils;
+import net.minecraft.core.Direction;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraftforge.items.IItemHandler;
 
 public class TileTransitRequest extends TransitRequest {
 
-    private final TileEntity tile;
+    private final BlockEntity tile;
     private final Direction side;
     private final Map<HashedItem, TileItemData> itemMap = new LinkedHashMap<>();
 
-    public TileTransitRequest(TileEntity tile, Direction side) {
+    public TileTransitRequest(BlockEntity tile, Direction side) {
         this.tile = tile;
         this.side = side;
     }
@@ -31,7 +32,11 @@ public class TileTransitRequest extends TransitRequest {
 
     public int getCount(HashedItem itemType) {
         ItemData data = itemMap.get(itemType);
-        return data != null ? data.getTotalCount() : 0;
+        return data == null ? 0 : data.getTotalCount();
+    }
+
+    protected Direction getSide() {
+        return side;
     }
 
     public Map<HashedItem, TileItemData> getItemMap() {
@@ -58,29 +63,34 @@ public class TileTransitRequest extends TransitRequest {
 
         @Override
         public ItemStack use(int amount) {
+            Direction side = getSide();
             IItemHandler handler = InventoryUtils.assertItemHandler("TileTransitRequest", tile, side);
             if (handler != null) {
                 ObjectIterator<Int2IntMap.Entry> iterator = slotMap.int2IntEntrySet().iterator();
                 while (iterator.hasNext()) {
                     Int2IntMap.Entry entry = iterator.next();
+                    int slot = entry.getIntKey();
                     int currentCount = entry.getIntValue();
                     int toUse = Math.min(amount, currentCount);
-                    ItemStack ret = handler.extractItem(entry.getIntKey(), toUse, false);
+                    ItemStack ret = handler.extractItem(slot, toUse, false);
                     boolean stackable = InventoryUtils.areItemsStackable(getItemType().getStack(), ret);
                     if (!stackable || ret.getCount() != toUse) { // be loud if an InvStack's prediction doesn't line up
-                        Mekanism.logger.warn("An inventory's returned content {} does not line up with TileTransitRequest's prediction.", !stackable ? "type" : "count");
-                        Mekanism.logger.warn("TileTransitRequest item: {}, toUse: {}, ret: {}", getItemType().getStack(), toUse, ret);
-                        Mekanism.logger.warn("Tile: {} {}", tile.getType().getRegistryName(), tile.getPos());
+                        Mekanism.logger.warn("An inventory's returned content {} does not line up with TileTransitRequest's prediction.", stackable ? "count" : "type");
+                        Mekanism.logger.warn("TileTransitRequest item: {}, toUse: {}, ret: {}, slot: {}", getItemType().getStack(), toUse, ret, slot);
+                        Mekanism.logger.warn("Tile: {} {} {}", RegistryUtils.getName(tile.getType()), tile.getBlockPos(), side);
                     }
                     amount -= toUse;
                     totalCount -= toUse;
                     if (totalCount == 0) {
                         itemMap.remove(getItemType());
                     }
-                    entry.setValue(currentCount = currentCount - toUse);
+                    currentCount = currentCount - toUse;
                     if (currentCount == 0) {
                         //If we removed all items from this slot, remove the slot
                         iterator.remove();
+                    } else {
+                        // otherwise, update the amount in it
+                        entry.setValue(currentCount);
                     }
                     if (amount == 0) {
                         break;

@@ -9,6 +9,7 @@ import mekanism.api.chemical.slurry.SlurryStack;
 import mekanism.client.render.MekanismRenderer;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 
+//TODO - 1.18: Make it possible for chemicals to define a "glow/light" value and then use that here
 public abstract class ChemicalRenderData<STACK extends ChemicalStack<?>> extends RenderData {
 
     @Nonnull
@@ -36,7 +37,7 @@ public abstract class ChemicalRenderData<STACK extends ChemicalStack<?>> extends
     @Override
     public int hashCode() {
         int code = super.hashCode();
-        code = 31 * code + chemicalType.getTypeRegistryName().hashCode();
+        code = 31 * code + chemicalType.getType().hashCode();
         return code;
     }
 
@@ -48,7 +49,7 @@ public abstract class ChemicalRenderData<STACK extends ChemicalStack<?>> extends
         if (o == null || getClass() != o.getClass() || !super.equals(o)) {
             return false;
         }
-        return chemicalType.isTypeEqual(((ChemicalRenderData) o).chemicalType);
+        return chemicalType.getType() == ((ChemicalRenderData<?>) o).chemicalType.getType();
     }
 
     public static class GasRenderData extends ChemicalRenderData<GasStack> {

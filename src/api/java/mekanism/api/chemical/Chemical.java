@@ -1,29 +1,28 @@
 package mekanism.api.chemical;
 
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
+import java.util.Optional;
+import java.util.stream.Stream;
+import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
-import mcp.MethodsReturnNonnullByDefault;
 import mekanism.api.chemical.attribute.ChemicalAttribute;
 import mekanism.api.providers.IChemicalProvider;
-import mekanism.api.text.IHasTextComponent;
-import mekanism.api.text.IHasTranslationKey;
-import net.minecraft.nbt.CompoundNBT;
-import net.minecraft.tags.ITag;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.text.ITextComponent;
-import net.minecraft.util.text.TranslationTextComponent;
-import net.minecraftforge.common.util.ReverseTagWrapper;
-import net.minecraftforge.registries.ForgeRegistryEntry;
+import mekanism.api.text.TextComponentUtil;
+import net.minecraft.MethodsReturnNonnullByDefault;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
+import net.minecraftforge.registries.tags.IReverseTag;
 
 @ParametersAreNonnullByDefault
 @MethodsReturnNonnullByDefault
-public abstract class Chemical<CHEMICAL extends Chemical<CHEMICAL>> extends ForgeRegistryEntry<CHEMICAL> implements IChemicalProvider<CHEMICAL>, IHasTextComponent,
-      IHasTranslationKey {
+public abstract class Chemical<CHEMICAL extends Chemical<CHEMICAL>> implements IChemicalProvider<CHEMICAL> {
 
-    private final ReverseTagWrapper<CHEMICAL> reverseTags;
+    private final ChemicalTags<CHEMICAL> chemicalTags;
     private final Map<Class<? extends ChemicalAttribute>, ChemicalAttribute> attributeMap;
 
     private final ResourceLocation iconLocation;
@@ -33,14 +32,17 @@ public abstract class Chemical<CHEMICAL extends Chemical<CHEMICAL>> extends Forg
     private String translationKey;
 
     protected Chemical(ChemicalBuilder<CHEMICAL, ?> builder, ChemicalTags<CHEMICAL> chemicalTags) {
-        reverseTags = new ReverseTagWrapper<>(getChemical(), chemicalTags::getCollection);
-        this.attributeMap = builder.getAttributeMap();
+        this.chemicalTags = chemicalTags;
+        //Copy the map to support addAttribute
+        this.attributeMap = new HashMap<>(builder.getAttributeMap());
         this.iconLocation = builder.getTexture();
         this.tint = builder.getColor();
         this.hidden = builder.isHidden();
     }
 
+    @Nonnull
     @Override
+    @SuppressWarnings("unchecked")
     public CHEMICAL getChemical() {
         return (CHEMICAL) this;
     }
@@ -111,13 +113,16 @@ public abstract class Chemical<CHEMICAL extends Chemical<CHEMICAL>> extends Forg
      *
      * @return the tag compound this Chemical was written to
      */
-    public abstract CompoundNBT write(CompoundNBT nbtTags);
+    public abstract CompoundTag write(CompoundTag nbtTags);
 
+    /**
+     * Gets the default translation key for this chemical.
+     */
     protected abstract String getDefaultTranslationKey();
 
     @Override
-    public ITextComponent getTextComponent() {
-        return new TranslationTextComponent(getTranslationKey());
+    public Component getTextComponent() {
+        return TextComponentUtil.translate(getTranslationKey());
     }
 
     /**
@@ -139,7 +144,16 @@ public abstract class Chemical<CHEMICAL extends Chemical<CHEMICAL>> extends Forg
     }
 
     /**
-     * Whether or not this chemical is hidden.
+     * Get the color representation used for displaying in things like durability bars of chemical tanks.
+     *
+     * @return int representation of color in 0xRRGGBB format
+     */
+    public int getColorRepresentation() {
+        return getTint();
+    }
+
+    /**
+     * Whether this chemical is hidden.
      *
      * @return if this chemical is hidden
      */
@@ -147,13 +161,43 @@ public abstract class Chemical<CHEMICAL extends Chemical<CHEMICAL>> extends Forg
         return hidden;
     }
 
-    public boolean isIn(ITag<CHEMICAL> tag) {
-        return tag.contains(getChemical());
+    /**
+     * Checks if this chemical is in a given tag.
+     *
+     * @param tag The tag to check.
+     *
+     * @return {@code true} if the chemical is in the tag, {@code false} otherwise.
+     */
+    public boolean is(TagKey<CHEMICAL> tag) {
+        return getReverseTag().map(reverseTag -> reverseTag.containsTag(tag))
+              .orElse(false);
     }
 
-    public Set<ResourceLocation> getTags() {
-        return reverseTags.getTagNames();
+    /**
+     * Gets the tags that this chemical is a part of.
+     *
+     * @return All the tags this chemical is a part of.
+     */
+    public Stream<TagKey<CHEMICAL>> getTags() {
+        return getReverseTag().map(IReverseTag::getTagKeys).orElseGet(Stream::empty);
     }
 
+    /**
+     * Used to look-up the reverse tag that corresponds with this chemical.
+     *
+     * @return Corresponding reverse tag or empty.
+     */
+    protected Optional<IReverseTag<CHEMICAL>> getReverseTag() {
+        return chemicalTags.getManager().flatMap(manager -> manager.getReverseTag(getChemical()));
+    }
+
+    /**
+     * Gets whether this chemical is the empty instance.
+     *
+     * @return {@code true} if this chemical is the empty instance, {@code false} otherwise.
+     */
     public abstract boolean isEmptyType();
+
+    @Override
+    public abstract ResourceLocation getRegistryName();
 }

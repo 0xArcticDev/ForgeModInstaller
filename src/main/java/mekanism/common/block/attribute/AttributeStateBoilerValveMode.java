@@ -8,12 +8,12 @@ import mekanism.api.text.EnumColor;
 import mekanism.api.text.IHasTextComponent;
 import mekanism.api.text.ILangEntry;
 import mekanism.common.MekanismLang;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.state.EnumProperty;
-import net.minecraft.state.Property;
-import net.minecraft.util.IStringSerializable;
-import net.minecraft.util.text.ITextComponent;
+import net.minecraft.network.chat.Component;
+import net.minecraft.util.StringRepresentable;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.EnumProperty;
+import net.minecraft.world.level.block.state.properties.Property;
 
 public class AttributeStateBoilerValveMode implements AttributeState {
 
@@ -21,15 +21,15 @@ public class AttributeStateBoilerValveMode implements AttributeState {
 
     @Override
     public BlockState copyStateData(BlockState oldState, BlockState newState) {
-        if (Attribute.has(newState.getBlock(), AttributeStateBoilerValveMode.class)) {
-            newState = newState.with(modeProperty, oldState.get(modeProperty));
+        if (Attribute.has(newState, AttributeStateBoilerValveMode.class)) {
+            newState = newState.setValue(modeProperty, oldState.getValue(modeProperty));
         }
         return newState;
     }
 
     @Override
     public BlockState getDefaultState(@Nonnull BlockState state) {
-        return state.with(modeProperty, BoilerValveMode.INPUT);
+        return state.setValue(modeProperty, BoilerValveMode.INPUT);
     }
 
     @Override
@@ -37,7 +37,7 @@ public class AttributeStateBoilerValveMode implements AttributeState {
         properties.add(modeProperty);
     }
 
-    public enum BoilerValveMode implements IStringSerializable, IHasTextComponent, IIncrementalEnum<BoilerValveMode> {
+    public enum BoilerValveMode implements StringRepresentable, IHasTextComponent, IIncrementalEnum<BoilerValveMode> {
         INPUT("input", MekanismLang.BOILER_VALVE_MODE_INPUT, EnumColor.BRIGHT_GREEN),
         OUTPUT_STEAM("output_steam", MekanismLang.BOILER_VALVE_MODE_OUTPUT_STEAM, EnumColor.GRAY),
         OUTPUT_COOLANT("output_coolant", MekanismLang.BOILER_VALVE_MODE_OUTPUT_COOLANT, EnumColor.DARK_AQUA);
@@ -56,12 +56,12 @@ public class AttributeStateBoilerValveMode implements AttributeState {
 
         @Nonnull
         @Override
-        public String getString() {
+        public String getSerializedName() {
             return name;
         }
 
         @Override
-        public ITextComponent getTextComponent() {
+        public Component getTextComponent() {
             return langEntry.translateColored(color);
         }
 

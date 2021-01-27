@@ -1,7 +1,7 @@
 package mekanism.defense.common;
 
 import mekanism.api.text.ILangEntry;
-import net.minecraft.util.Util;
+import net.minecraft.Util;
 
 public enum DefenseLang implements ILangEntry {
     PLACEHOLDER("null", "null");
@@ -9,7 +9,7 @@ public enum DefenseLang implements ILangEntry {
     private final String key;
 
     DefenseLang(String type, String path) {
-        this(Util.makeTranslationKey(type, MekanismDefense.rl(path)));
+        this(Util.makeDescriptionId(type, MekanismDefense.rl(path)));
     }
 
     DefenseLang(String key) {

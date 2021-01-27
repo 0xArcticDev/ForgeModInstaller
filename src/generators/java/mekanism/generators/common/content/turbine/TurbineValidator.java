@@ -19,12 +19,12 @@ import mekanism.generators.common.tile.turbine.TileEntityRotationalComplex;
 import mekanism.generators.common.tile.turbine.TileEntitySaturatingCondenser;
 import mekanism.generators.common.tile.turbine.TileEntityTurbineRotor;
 import mekanism.generators.common.tile.turbine.TileEntityTurbineVent;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.tileentity.TileEntity;
-import net.minecraft.util.Direction;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.chunk.IChunk;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.ChunkAccess;
 
 public class TurbineValidator extends CuboidStructureValidator<TurbineMultiblockData> {
 
@@ -35,7 +35,7 @@ public class TurbineValidator extends CuboidStructureValidator<TurbineMultiblock
     }
 
     @Override
-    protected CasingType getCasingType(BlockPos pos, BlockState state) {
+    protected CasingType getCasingType(BlockState state) {
         Block block = state.getBlock();
         if (BlockType.is(block, GeneratorsBlockTypes.TURBINE_CASING)) {
             return CasingType.FRAME;
@@ -48,7 +48,7 @@ public class TurbineValidator extends CuboidStructureValidator<TurbineMultiblock
     }
 
     @Override
-    protected boolean validateInner(BlockState state, Long2ObjectMap<IChunk> chunkMap, BlockPos pos) {
+    protected boolean validateInner(BlockState state, Long2ObjectMap<ChunkAccess> chunkMap, BlockPos pos) {
         if (super.validateInner(state, chunkMap, pos)) {
             return true;
         }
@@ -57,7 +57,7 @@ public class TurbineValidator extends CuboidStructureValidator<TurbineMultiblock
     }
 
     @Override
-    public FormationResult postcheck(TurbineMultiblockData structure, Set<BlockPos> innerNodes, Long2ObjectMap<IChunk> chunkMap) {
+    public FormationResult postcheck(TurbineMultiblockData structure, Long2ObjectMap<ChunkAccess> chunkMap) {
         if (structure.length() % 2 != 1 || structure.width() % 2 != 1) {
             return FormationResult.fail(GeneratorsLang.TURBINE_INVALID_EVEN_LENGTH);
         }
@@ -72,13 +72,12 @@ public class TurbineValidator extends CuboidStructureValidator<TurbineMultiblock
         Set<BlockPos> condensers = new ObjectOpenHashSet<>();
 
         //Scan for complex
-        for (BlockPos pos : innerNodes) {
-            TileEntity tile = WorldUtils.getTileEntity(world, chunkMap, pos);
+        for (BlockPos pos : structure.internalLocations) {
+            BlockEntity tile = WorldUtils.getTileEntity(world, chunkMap, pos);
             if (tile instanceof TileEntityRotationalComplex) {
                 if (complex != null || pos.getX() != centerX || pos.getZ() != centerZ) {
                     return FormationResult.fail(GeneratorsLang.TURBINE_INVALID_BAD_COMPLEX, pos);
                 }
-                structure.internalLocations.add(pos);
                 complex = pos;
             } else if (tile instanceof TileEntityTurbineRotor) {
                 if (pos.getX() != centerX || pos.getZ() != centerZ) {
@@ -105,15 +104,22 @@ public class TurbineValidator extends CuboidStructureValidator<TurbineMultiblock
             return FormationResult.fail(GeneratorsLang.TURBINE_INVALID_TOO_NARROW);
         }
 
+        //Terminate if coils don't exist
+        if (coils.isEmpty()) {
+            return FormationResult.fail(GeneratorsLang.TURBINE_INVALID_MISSING_COILS);
+        }
+
+        BlockPos.MutableBlockPos mutablePos = new BlockPos.MutableBlockPos();
         //Make sure a flat, horizontal plane of dispersers exists within the multiblock around the complex
         for (int x = complex.getX() - innerRadius; x <= complex.getX() + innerRadius; x++) {
             for (int z = complex.getZ() - innerRadius; z <= complex.getZ() + innerRadius; z++) {
                 if (x != centerX || z != centerZ) {
-                    TileEntityPressureDisperser tile = WorldUtils.getTileEntity(TileEntityPressureDisperser.class, world, chunkMap, new BlockPos(x, complex.getY(), z));
+                    mutablePos.set(x, complex.getY(), z);
+                    TileEntityPressureDisperser tile = WorldUtils.getTileEntity(TileEntityPressureDisperser.class, world, chunkMap, mutablePos);
                     if (tile == null) {
-                        return FormationResult.fail(GeneratorsLang.TURBINE_INVALID_MISSING_DISPERSER, new BlockPos(x, complex.getY(), z));
+                        return FormationResult.fail(GeneratorsLang.TURBINE_INVALID_MISSING_DISPERSER, mutablePos);
                     }
-                    dispersers.remove(new BlockPos(x, complex.getY(), z));
+                    dispersers.remove(mutablePos);
                 }
             }
         }
@@ -136,15 +142,15 @@ public class TurbineValidator extends CuboidStructureValidator<TurbineMultiblock
 
         // Starting from the complex, walk down and count the number of rotors/blades in the structure
         for (int y = complex.getY() - 1; y > structure.getMinPos().getY(); y--) {
-            TileEntityTurbineRotor rotor = WorldUtils.getTileEntity(TileEntityTurbineRotor.class, world, chunkMap, new BlockPos(centerX, y, centerZ));
+            mutablePos.set(centerX, y, centerZ);
+            TileEntityTurbineRotor rotor = WorldUtils.getTileEntity(TileEntityTurbineRotor.class, world, chunkMap, mutablePos);
             if (rotor == null) {
                 // Not a contiguous set of rotors
                 return FormationResult.fail(GeneratorsLang.TURBINE_INVALID_ROTORS_NOT_CONTIGUOUS);
             }
             turbineHeight++;
             blades += rotor.getHousedBlades();
-            structure.internalLocations.add(rotor.getPos());
-            turbines.remove(new BlockPos(centerX, y, centerZ));
+            turbines.remove(mutablePos);
         }
 
         // If there are any rotors left over, they are in the wrong place in the structure
@@ -155,7 +161,7 @@ public class TurbineValidator extends CuboidStructureValidator<TurbineMultiblock
         // Update the structure with number of blades found on rotors
         structure.blades = blades;
 
-        BlockPos startCoord = complex.offset(Direction.UP);
+        BlockPos startCoord = complex.relative(Direction.UP);
         if (WorldUtils.getTileEntity(TileEntityElectromagneticCoil.class, world, chunkMap, startCoord) != null) {
             structure.coils = FormationProtocol.explore(startCoord, coord -> WorldUtils.getTileEntity(TileEntityElectromagneticCoil.class, world, chunkMap, coord) != null);
         }

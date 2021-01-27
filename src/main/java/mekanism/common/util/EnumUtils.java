@@ -3,12 +3,12 @@ package mekanism.common.util;
 import mekanism.api.RelativeSide;
 import mekanism.api.Upgrade;
 import mekanism.api.chemical.ChemicalType;
+import mekanism.api.text.EnumColor;
 import mekanism.common.content.blocktype.FactoryType;
-import mekanism.common.lib.multiblock.MultiblockCache.CacheSubstance;
 import mekanism.common.lib.transmitter.TransmissionType;
-import mekanism.common.resource.OreType;
 import mekanism.common.resource.PrimaryResource;
 import mekanism.common.resource.ResourceType;
+import mekanism.common.resource.ore.OreType;
 import mekanism.common.tier.BinTier;
 import mekanism.common.tier.CableTier;
 import mekanism.common.tier.ChemicalTankTier;
@@ -24,8 +24,8 @@ import mekanism.common.tier.TubeTier;
 import mekanism.common.tile.base.SubstanceType;
 import mekanism.common.util.UnitDisplayUtils.FloatingLongMeasurementUnit;
 import mekanism.common.util.UnitDisplayUtils.MeasurementUnit;
-import net.minecraft.inventory.EquipmentSlotType;
-import net.minecraft.util.Direction;
+import net.minecraft.core.Direction;
+import net.minecraft.world.entity.EquipmentSlot;
 
 public class EnumUtils {
 
@@ -35,8 +35,12 @@ public class EnumUtils {
     /**
      * Cached collection of armor slot positions from EquipmentSlotType. DO NOT MODIFY THIS LIST.
      */
-    public static final EquipmentSlotType[] ARMOR_SLOTS = new EquipmentSlotType[]{EquipmentSlotType.HEAD, EquipmentSlotType.CHEST, EquipmentSlotType.LEGS,
-                                                                                  EquipmentSlotType.FEET};
+    public static final EquipmentSlot[] ARMOR_SLOTS = {EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
+
+    /**
+     * Cached collection of hand slot positions from EquipmentSlotType. DO NOT MODIFY THIS LIST.
+     */
+    public static final EquipmentSlot[] HAND_SLOTS = {EquipmentSlot.MAINHAND, EquipmentSlot.OFFHAND};
 
     /**
      * Cached value of {@link Direction#values()}. DO NOT MODIFY THIS LIST.
@@ -48,7 +52,7 @@ public class EnumUtils {
      *
      * @implNote Index is ordinal() - 2, as the first two elements of {@link Direction} are {@link Direction#DOWN} and {@link Direction#UP}
      */
-    public static final Direction[] HORIZONTAL_DIRECTIONS = new Direction[]{Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST};
+    public static final Direction[] HORIZONTAL_DIRECTIONS = {Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST};
 
     /**
      * Cached value of {@link RelativeSide#values()}. DO NOT MODIFY THIS LIST.
@@ -146,11 +150,6 @@ public class EnumUtils {
     public static final SubstanceType[] SUBSTANCES = SubstanceType.values();
 
     /**
-     * Cached value of {@link CacheSubstance#values()}. DO NOT MODIFY THIS LIST.
-     */
-    public static final CacheSubstance[] CACHE_SUBSTANCES = CacheSubstance.values();
-
-    /**
      * Cached value of {@link OreType#values()}. DO NOT MODIFY THIS LIST.
      */
     public static final OreType[] ORE_TYPES = OreType.values();
@@ -166,12 +165,17 @@ public class EnumUtils {
     public static final ResourceType[] RESOURCE_TYPES = ResourceType.values();
 
     /**
-     * Cached value of {@link EquipmentSlotType#values()}. DO NOT MODIFY THIS LIST.
+     * Cached value of {@link EquipmentSlot#values()}. DO NOT MODIFY THIS LIST.
      */
-    public static final EquipmentSlotType[] EQUIPMENT_SLOT_TYPES = EquipmentSlotType.values();
+    public static final EquipmentSlot[] EQUIPMENT_SLOT_TYPES = EquipmentSlot.values();
 
     /**
      * Cached value of {@link ChemicalType#values()}. DO NOT MODIFY THIS LIST.
      */
     public static final ChemicalType[] CHEMICAL_TYPES = ChemicalType.values();
+
+    /**
+     * Cached value of {@link EnumColor#values()}. DO NOT MODIFY THIS LIST.
+     */
+    public static final EnumColor[] COLORS = EnumColor.values();
 }

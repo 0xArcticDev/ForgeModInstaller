@@ -12,10 +12,10 @@ import mekanism.api.text.IHasTextComponent;
 import mekanism.common.content.network.transmitter.Transmitter;
 import mekanism.common.lib.transmitter.acceptor.NetworkAcceptorCache;
 import mekanism.common.util.EnumUtils;
-import net.minecraft.util.Direction;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.World;
-import net.minecraftforge.fml.common.thread.EffectiveSide;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.level.Level;
+import net.minecraftforge.fml.util.thread.EffectiveSide;
 
 public abstract class DynamicNetwork<ACCEPTOR, NETWORK extends DynamicNetwork<ACCEPTOR, NETWORK, TRANSMITTER>,
       TRANSMITTER extends Transmitter<ACCEPTOR, NETWORK, TRANSMITTER>> implements INetworkDataHandler, IHasTextComponent {
@@ -24,12 +24,10 @@ public abstract class DynamicNetwork<ACCEPTOR, NETWORK extends DynamicNetwork<AC
     protected final Set<TRANSMITTER> transmittersToAdd = new ObjectOpenHashSet<>();
     protected final NetworkAcceptorCache<ACCEPTOR> acceptorCache = new NetworkAcceptorCache<>();
     @Nullable
-    protected World world;
+    protected Level world;
     private final UUID uuid;
-
-    protected DynamicNetwork() {
-        this(UUID.randomUUID());
-    }
+    @Nullable
+    private CompatibleTransmitterValidator<ACCEPTOR, NETWORK, TRANSMITTER> transmitterValidator;
 
     protected DynamicNetwork(UUID networkID) {
         this.uuid = networkID;
@@ -39,12 +37,9 @@ public abstract class DynamicNetwork<ACCEPTOR, NETWORK extends DynamicNetwork<AC
         return uuid;
     }
 
+    @SuppressWarnings("unchecked")
     protected NETWORK getNetwork() {
         return (NETWORK) this;
-    }
-
-    public void addNewTransmitters(Collection<TRANSMITTER> newTransmitters) {
-        transmittersToAdd.addAll(newTransmitters);
     }
 
     public void commit() {
@@ -75,6 +70,21 @@ public abstract class DynamicNetwork<ACCEPTOR, NETWORK extends DynamicNetwork<AC
             }
         }
         acceptorCache.commit();
+        transmitterValidator = null;
+    }
+
+    @Nullable
+    public CompatibleTransmitterValidator<ACCEPTOR, NETWORK, TRANSMITTER> getTransmitterValidator() {
+        return transmitterValidator;
+    }
+
+    public void addNewTransmitters(Collection<TRANSMITTER> newTransmitters, CompatibleTransmitterValidator<ACCEPTOR, NETWORK, TRANSMITTER> transmitterValidator) {
+        transmittersToAdd.addAll(newTransmitters);
+        //Cache the transmitter validator in the network, so that if we have a case of orphans being on either side of
+        // an existing network, and the orphans are what have contents stored, that then we don't try merging them all
+        // together when they may not actually be able to have both sets of orphans connect. After the network is
+        // updated (committed), this cached validator will be unset
+        this.transmitterValidator = transmitterValidator;
     }
 
     protected void addTransmitterFromCommit(TRANSMITTER transmitter) {
@@ -85,12 +95,13 @@ public abstract class DynamicNetwork<ACCEPTOR, NETWORK extends DynamicNetwork<AC
     }
 
     public boolean isRemote() {
-        return world == null ? EffectiveSide.get().isClient() : world.isRemote;
+        return world == null ? EffectiveSide.get().isClient() : world.isClientSide;
     }
 
     public void invalidate(@Nullable TRANSMITTER triggerTransmitter) {
-        if (transmitters.size() == 1 && triggerTransmitter != null) {
+        if (transmitters.size() == 1 && triggerTransmitter != null && !triggerTransmitter.isValid()) {
             //We're destroying the last transmitter in the network
+            //Note: We check it isn't valid to make sure we are destroying it and not just changing redstone sensitivity
             onLastTransmitterRemoved(triggerTransmitter);
         }
         removeInvalid(triggerTransmitter);
@@ -104,7 +115,6 @@ public abstract class DynamicNetwork<ACCEPTOR, NETWORK extends DynamicNetwork<AC
                 }
             }
         }
-        transmitters.clear();
         deregister();
     }
 
@@ -156,6 +166,8 @@ public abstract class DynamicNetwork<ACCEPTOR, NETWORK extends DynamicNetwork<AC
     public void deregister() {
         transmitters.clear();
         transmittersToAdd.clear();
+        acceptorCache.deregister();
+        transmitterValidator = null;
         if (isRemote()) {
             TransmitterNetworkRegistry.getInstance().removeClientNetwork(this);
         } else {
@@ -172,7 +184,7 @@ public abstract class DynamicNetwork<ACCEPTOR, NETWORK extends DynamicNetwork<AC
     }
 
     @Nullable
-    public World getWorld() {
+    public Level getWorld() {
         return world;
     }
 
@@ -213,9 +225,8 @@ public abstract class DynamicNetwork<ACCEPTOR, NETWORK extends DynamicNetwork<AC
     public boolean equals(Object o) {
         if (o == this) {
             return true;
-        }
-        if (o instanceof DynamicNetwork) {
-            return uuid.equals(((DynamicNetwork<?, ?, ?>) o).uuid);
+        } else if (o instanceof DynamicNetwork<?, ?, ?> other) {
+            return uuid.equals(other.uuid);
         }
         return false;
     }

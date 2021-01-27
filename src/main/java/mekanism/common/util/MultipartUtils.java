@@ -1,16 +1,15 @@
 package mekanism.common.util;
 
 import java.util.Collection;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.BlockRayTraceResult;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.RayTraceResult;
-import net.minecraft.util.math.shapes.VoxelShape;
-import net.minecraft.util.math.vector.Vector3d;
+import net.minecraft.core.BlockPos;
+import net.minecraft.util.Mth;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.VoxelShape;
 import net.minecraftforge.common.ForgeMod;
-import org.apache.commons.lang3.tuple.Pair;
 
 public final class MultipartUtils {
 
@@ -18,35 +17,38 @@ public final class MultipartUtils {
     }
 
     /* taken from MCMP */
-    public static Pair<Vector3d, Vector3d> getRayTraceVectors(Entity entity) {
-        float pitch = entity.rotationPitch;
-        float yaw = entity.rotationYaw;
-        Vector3d start = new Vector3d(entity.getPosX(), entity.getPosY() + entity.getEyeHeight(), entity.getPosZ());
-        float f1 = MathHelper.cos(-yaw * 0.017453292F - (float) Math.PI);
-        float f2 = MathHelper.sin(-yaw * 0.017453292F - (float) Math.PI);
-        float f3 = -MathHelper.cos(-pitch * 0.017453292F);
-        float f4 = MathHelper.sin(-pitch * 0.017453292F);
-        float f5 = f2 * f3;
-        float f6 = f1 * f3;
-        double d3 = 5.0D;
-        if (entity instanceof PlayerEntity) {
-            d3 = ((PlayerEntity) entity).getAttribute(ForgeMod.REACH_DISTANCE.get()).getValue();
+    public static RayTraceVectors getRayTraceVectors(Entity entity) {
+        float pitch = entity.getXRot();
+        float yaw = entity.getYRot();
+        Vec3 start = entity.getEyePosition();
+        float f1 = Mth.cos(-yaw * 0.017453292F - (float) Math.PI);
+        float f2 = Mth.sin(-yaw * 0.017453292F - (float) Math.PI);
+        float f3 = -Mth.cos(-pitch * 0.017453292F);
+        float lookY = Mth.sin(-pitch * 0.017453292F);
+        float lookX = f2 * f3;
+        float lookZ = f1 * f3;
+        double reach = 5.0D;
+        if (entity instanceof Player player) {
+            reach = player.getAttributeValue(ForgeMod.REACH_DISTANCE.get());
         }
-        Vector3d end = start.add(f5 * d3, f4 * d3, f6 * d3);
-        return Pair.of(start, end);
+        Vec3 end = start.add(lookX * reach, lookY * reach, lookZ * reach);
+        return new RayTraceVectors(start, end);
     }
 
-    public static AdvancedRayTraceResult collisionRayTrace(BlockPos pos, Vector3d start, Vector3d end, Collection<VoxelShape> boxes) {
+    public static AdvancedRayTraceResult collisionRayTrace(Entity entity, BlockPos pos, Collection<VoxelShape> boxes) {
+        RayTraceVectors vecs = getRayTraceVectors(entity);
+        return collisionRayTrace(pos, vecs.start(), vecs.end(), boxes);
+    }
+
+    public static AdvancedRayTraceResult collisionRayTrace(BlockPos pos, Vec3 start, Vec3 end, Collection<VoxelShape> boxes) {
         double minDistance = Double.POSITIVE_INFINITY;
         AdvancedRayTraceResult hit = null;
         int i = -1;
         for (VoxelShape shape : boxes) {
             if (shape != null) {
-                BlockRayTraceResult result = shape.rayTrace(start, end, pos);
+                BlockHitResult result = shape.clip(start, end, pos);
                 if (result != null) {
-                    result.subHit = i;
-                    result.hitInfo = null;
-                    AdvancedRayTraceResult advancedResult = new AdvancedRayTraceResult(result, shape);
+                    AdvancedRayTraceResult advancedResult = new AdvancedRayTraceResult(result, shape, i);
                     double d = advancedResult.squareDistanceTo(start);
                     if (d < minDistance) {
                         minDistance = d;
@@ -59,22 +61,27 @@ public final class MultipartUtils {
         return hit;
     }
 
+    public record RayTraceVectors(Vec3 start, Vec3 end) {
+    }
+
     public static class AdvancedRayTraceResult {
 
         public final VoxelShape bounds;
-        public final RayTraceResult hit;
+        public final HitResult hit;
+        public final int subHit;
 
-        public AdvancedRayTraceResult(RayTraceResult mop, VoxelShape shape) {
+        public AdvancedRayTraceResult(HitResult mop, VoxelShape shape, int subHit) {
             hit = mop;
             bounds = shape;
+            this.subHit = subHit;
         }
 
         public boolean valid() {
             return hit != null && bounds != null;
         }
 
-        public double squareDistanceTo(Vector3d vec) {
-            return hit.getHitVec().squareDistanceTo(vec);
+        public double squareDistanceTo(Vec3 vec) {
+            return hit.getLocation().distanceToSqr(vec);
         }
     }
 }

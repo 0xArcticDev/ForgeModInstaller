@@ -1,21 +1,29 @@
 package mekanism.common.content.miner;
 
 import javax.annotation.Nonnull;
+import mekanism.common.base.TagCache;
 import mekanism.common.content.filter.FilterType;
 import mekanism.common.content.filter.IMaterialFilter;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.material.Material;
-import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.CompoundNBT;
-import net.minecraft.network.PacketBuffer;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.state.BlockState;
 
 public class MinerMaterialFilter extends MinerFilter<MinerMaterialFilter> implements IMaterialFilter<MinerMaterialFilter> {
 
     private ItemStack materialItem = ItemStack.EMPTY;
 
-    public Material getMaterial() {
-        return Block.getBlockFromItem(materialItem.getItem()).getDefaultState().getMaterial();
+    public MinerMaterialFilter(ItemStack item) {
+        materialItem = item;
+    }
+
+    public MinerMaterialFilter() {
+    }
+
+    public MinerMaterialFilter(MinerMaterialFilter filter) {
+        super(filter);
+        materialItem = filter.materialItem.copy();
     }
 
     @Override
@@ -24,49 +32,50 @@ public class MinerMaterialFilter extends MinerFilter<MinerMaterialFilter> implem
     }
 
     @Override
-    public CompoundNBT write(CompoundNBT nbtTags) {
+    public boolean hasBlacklistedElement() {
+        return !materialItem.isEmpty() && materialItem.getItem() instanceof BlockItem && TagCache.materialHasMinerBlacklisted(materialItem);
+    }
+
+    @Override
+    public CompoundTag write(CompoundTag nbtTags) {
         super.write(nbtTags);
-        materialItem.write(nbtTags);
+        materialItem.save(nbtTags);
         return nbtTags;
     }
 
     @Override
-    public void read(CompoundNBT nbtTags) {
+    public void read(CompoundTag nbtTags) {
         super.read(nbtTags);
-        materialItem = ItemStack.read(nbtTags);
+        materialItem = ItemStack.of(nbtTags);
     }
 
     @Override
-    public void write(PacketBuffer buffer) {
+    public void write(FriendlyByteBuf buffer) {
         super.write(buffer);
-        buffer.writeItemStack(materialItem);
+        buffer.writeItem(materialItem);
     }
 
     @Override
-    public void read(PacketBuffer dataStream) {
+    public void read(FriendlyByteBuf dataStream) {
         super.read(dataStream);
-        materialItem = dataStream.readItemStack();
+        materialItem = dataStream.readItem();
     }
 
     @Override
     public int hashCode() {
-        int code = 1;
+        int code = super.hashCode();
         code = 31 * code + materialItem.hashCode();
         return code;
     }
 
     @Override
-    public boolean equals(Object filter) {
-        return filter instanceof MinerMaterialFilter && ((MinerMaterialFilter) filter).materialItem.isItemEqual(materialItem);
+    public boolean equals(Object o) {
+        return super.equals(o) && o instanceof MinerMaterialFilter filter && filter.materialItem.sameItem(materialItem);
     }
 
     @Override
     public MinerMaterialFilter clone() {
-        MinerMaterialFilter filter = new MinerMaterialFilter();
-        filter.replaceStack = replaceStack;
-        filter.requireStack = requireStack;
-        filter.materialItem = materialItem;
-        return filter;
+        return new MinerMaterialFilter(this);
     }
 
     @Override

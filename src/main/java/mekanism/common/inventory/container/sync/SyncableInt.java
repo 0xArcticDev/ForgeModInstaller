@@ -2,10 +2,10 @@ package mekanism.common.inventory.container.sync;
 
 import java.util.function.IntConsumer;
 import java.util.function.IntSupplier;
-import mekanism.common.network.container.property.IntPropertyData;
+import mekanism.common.network.to_client.container.property.IntPropertyData;
 
 /**
- * Slightly modified version of {@link net.minecraft.util.IntReferenceHolder}
+ * Slightly modified version of {@link net.minecraft.world.inventory.DataSlot}
  */
 public abstract class SyncableInt implements ISyncableData {
 

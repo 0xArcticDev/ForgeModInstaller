@@ -2,31 +2,28 @@
   "type": "minecraft:block",
   "pools": [
     {
-      "rolls": 1,
+      "bonus_rolls": 0.0,
       "entries": [
         {
           "type": "minecraft:item",
           "functions": [
             {
               "function": "minecraft:copy_nbt",
-              "source": "block_entity",
               "ops": [
                 {
+                  "op": "replace",
                   "source": "Items",
-                  "target": "mekData.Items",
-                  "op": "replace"
+                  "target": "mekData.Items"
                 }
-              ]
+              ],
+              "source": "block_entity"
             }
           ],
           "name": "mekanism:elite_bin"
         }
       ],
-      "conditions": [
-        {
-          "condition": "minecraft:survives_explosion"
-        }
-      ]
+      "name": "main",
+      "rolls": 1.0
     }
   ]
 }

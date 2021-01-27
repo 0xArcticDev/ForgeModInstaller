@@ -1,76 +1,82 @@
 package mekanism.common.content.miner;
 
 import mekanism.api.NBTConstants;
+import mekanism.common.base.TagCache;
 import mekanism.common.content.filter.FilterType;
 import mekanism.common.content.filter.IModIDFilter;
+import mekanism.common.lib.WildcardMatcher;
 import mekanism.common.network.BasePacketHandler;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.CompoundNBT;
-import net.minecraft.network.PacketBuffer;
+import mekanism.common.util.RegistryUtils;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.world.level.block.state.BlockState;
 
 public class MinerModIDFilter extends MinerFilter<MinerModIDFilter> implements IModIDFilter<MinerModIDFilter> {
 
     private String modID;
 
-    @Override
-    public boolean canFilter(BlockState state) {
-        String id = state.getBlock().getRegistryName().getNamespace();
-        if (modID.equals(id) || modID.equals("*")) {
-            return true;
-        } else if (modID.endsWith("*") && !modID.startsWith("*")) {
-            return id.startsWith(modID.substring(0, modID.length() - 1));
-        } else if (modID.startsWith("*") && !modID.endsWith("*")) {
-            return id.endsWith(modID.substring(1));
-        } else if (modID.startsWith("*") && modID.endsWith("*")) {
-            return id.contains(modID.substring(1, modID.length() - 1));
-        }
-        return false;
+    public MinerModIDFilter(String modID) {
+        this.modID = modID;
+    }
+
+    public MinerModIDFilter() {
+    }
+
+    public MinerModIDFilter(MinerModIDFilter filter) {
+        super(filter);
+        modID = filter.modID;
     }
 
     @Override
-    public CompoundNBT write(CompoundNBT nbtTags) {
+    public boolean canFilter(BlockState state) {
+        return WildcardMatcher.matches(modID, RegistryUtils.getNamespace(state.getBlock()));
+    }
+
+    @Override
+    public boolean hasBlacklistedElement() {
+        return TagCache.modIDHasMinerBlacklisted(modID);
+    }
+
+    @Override
+    public CompoundTag write(CompoundTag nbtTags) {
         super.write(nbtTags);
         nbtTags.putString(NBTConstants.MODID, modID);
         return nbtTags;
     }
 
     @Override
-    public void read(CompoundNBT nbtTags) {
+    public void read(CompoundTag nbtTags) {
         super.read(nbtTags);
         modID = nbtTags.getString(NBTConstants.MODID);
     }
 
     @Override
-    public void write(PacketBuffer buffer) {
+    public void write(FriendlyByteBuf buffer) {
         super.write(buffer);
-        buffer.writeString(modID);
+        buffer.writeUtf(modID);
     }
 
     @Override
-    public void read(PacketBuffer dataStream) {
+    public void read(FriendlyByteBuf dataStream) {
         super.read(dataStream);
         modID = BasePacketHandler.readString(dataStream);
     }
 
     @Override
     public int hashCode() {
-        int code = 1;
+        int code = super.hashCode();
         code = 31 * code + modID.hashCode();
         return code;
     }
 
     @Override
-    public boolean equals(Object filter) {
-        return filter instanceof MinerModIDFilter && ((MinerModIDFilter) filter).modID.equals(modID);
+    public boolean equals(Object o) {
+        return super.equals(o) && o instanceof MinerModIDFilter filter && filter.modID.equals(modID);
     }
 
     @Override
     public MinerModIDFilter clone() {
-        MinerModIDFilter filter = new MinerModIDFilter();
-        filter.replaceStack = replaceStack;
-        filter.requireStack = requireStack;
-        filter.modID = modID;
-        return filter;
+        return new MinerModIDFilter(this);
     }
 
     @Override

@@ -7,16 +7,16 @@ import javax.annotation.Nonnull;
 import mekanism.api.JsonConstants;
 import mekanism.api.SerializerHelper;
 import mekanism.api.recipes.CombinerRecipe;
-import mekanism.api.recipes.inputs.ItemStackIngredient;
+import mekanism.api.recipes.ingredients.ItemStackIngredient;
+import mekanism.api.recipes.ingredients.creator.IngredientCreatorAccess;
 import mekanism.common.Mekanism;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.crafting.IRecipeSerializer;
-import net.minecraft.network.PacketBuffer;
-import net.minecraft.util.JSONUtils;
-import net.minecraft.util.ResourceLocation;
-import net.minecraftforge.registries.ForgeRegistryEntry;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.GsonHelper;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.RecipeSerializer;
 
-public class CombinerRecipeSerializer<RECIPE extends CombinerRecipe> extends ForgeRegistryEntry<IRecipeSerializer<?>> implements IRecipeSerializer<RECIPE> {
+public class CombinerRecipeSerializer<RECIPE extends CombinerRecipe> implements RecipeSerializer<RECIPE> {
 
     private final IFactory<RECIPE> factory;
 
@@ -26,13 +26,13 @@ public class CombinerRecipeSerializer<RECIPE extends CombinerRecipe> extends For
 
     @Nonnull
     @Override
-    public RECIPE read(@Nonnull ResourceLocation recipeId, @Nonnull JsonObject json) {
-        JsonElement mainInput = JSONUtils.isJsonArray(json, JsonConstants.MAIN_INPUT) ? JSONUtils.getJsonArray(json, JsonConstants.MAIN_INPUT) :
-                                JSONUtils.getJsonObject(json, JsonConstants.MAIN_INPUT);
-        ItemStackIngredient mainIngredient = ItemStackIngredient.deserialize(mainInput);
-        JsonElement extraInput = JSONUtils.isJsonArray(json, JsonConstants.EXTRA_INPUT) ? JSONUtils.getJsonArray(json, JsonConstants.EXTRA_INPUT) :
-                                 JSONUtils.getJsonObject(json, JsonConstants.EXTRA_INPUT);
-        ItemStackIngredient extraIngredient = ItemStackIngredient.deserialize(extraInput);
+    public RECIPE fromJson(@Nonnull ResourceLocation recipeId, @Nonnull JsonObject json) {
+        JsonElement mainInput = GsonHelper.isArrayNode(json, JsonConstants.MAIN_INPUT) ? GsonHelper.getAsJsonArray(json, JsonConstants.MAIN_INPUT) :
+                                GsonHelper.getAsJsonObject(json, JsonConstants.MAIN_INPUT);
+        ItemStackIngredient mainIngredient = IngredientCreatorAccess.item().deserialize(mainInput);
+        JsonElement extraInput = GsonHelper.isArrayNode(json, JsonConstants.EXTRA_INPUT) ? GsonHelper.getAsJsonArray(json, JsonConstants.EXTRA_INPUT) :
+                                 GsonHelper.getAsJsonObject(json, JsonConstants.EXTRA_INPUT);
+        ItemStackIngredient extraIngredient = IngredientCreatorAccess.item().deserialize(extraInput);
         ItemStack output = SerializerHelper.getItemStack(json, JsonConstants.OUTPUT);
         if (output.isEmpty()) {
             throw new JsonSyntaxException("Combiner recipe output must not be empty.");
@@ -41,11 +41,11 @@ public class CombinerRecipeSerializer<RECIPE extends CombinerRecipe> extends For
     }
 
     @Override
-    public RECIPE read(@Nonnull ResourceLocation recipeId, @Nonnull PacketBuffer buffer) {
+    public RECIPE fromNetwork(@Nonnull ResourceLocation recipeId, @Nonnull FriendlyByteBuf buffer) {
         try {
-            ItemStackIngredient mainInput = ItemStackIngredient.read(buffer);
-            ItemStackIngredient extraInput = ItemStackIngredient.read(buffer);
-            ItemStack output = buffer.readItemStack();
+            ItemStackIngredient mainInput = IngredientCreatorAccess.item().read(buffer);
+            ItemStackIngredient extraInput = IngredientCreatorAccess.item().read(buffer);
+            ItemStack output = buffer.readItem();
             return this.factory.create(recipeId, mainInput, extraInput, output);
         } catch (Exception e) {
             Mekanism.logger.error("Error reading combiner recipe from packet.", e);
@@ -54,7 +54,7 @@ public class CombinerRecipeSerializer<RECIPE extends CombinerRecipe> extends For
     }
 
     @Override
-    public void write(@Nonnull PacketBuffer buffer, @Nonnull RECIPE recipe) {
+    public void toNetwork(@Nonnull FriendlyByteBuf buffer, @Nonnull RECIPE recipe) {
         try {
             recipe.write(buffer);
         } catch (Exception e) {

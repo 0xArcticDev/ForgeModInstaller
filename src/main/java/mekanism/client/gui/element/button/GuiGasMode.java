@@ -1,17 +1,17 @@
 package mekanism.client.gui.element.button;
 
-import com.mojang.blaze3d.matrix.MatrixStack;
+import com.mojang.blaze3d.vertex.PoseStack;
 import java.util.function.Supplier;
 import mekanism.client.gui.IGuiWrapper;
 import mekanism.common.Mekanism;
-import mekanism.common.network.PacketGuiInteract;
-import mekanism.common.network.PacketGuiInteract.GuiInteraction;
+import mekanism.common.network.to_server.PacketGuiInteract;
+import mekanism.common.network.to_server.PacketGuiInteract.GuiInteraction;
 import mekanism.common.tile.TileEntityChemicalTank.GasMode;
 import mekanism.common.util.MekanismUtils;
 import mekanism.common.util.MekanismUtils.ResourceType;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.text.ITextComponent;
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 
 public class GuiGasMode extends MekanismImageButton {
 
@@ -23,7 +23,7 @@ public class GuiGasMode extends MekanismImageButton {
     private final Supplier<GasMode> gasModeSupplier;
 
     public GuiGasMode(IGuiWrapper gui, int x, int y, boolean left, Supplier<GasMode> gasModeSupplier, BlockPos pos, int tank) {
-        super(gui, x, y, 10, IDLE, () -> Mekanism.packetHandler.sendToServer(new PacketGuiInteract(GuiInteraction.GAS_MODE_BUTTON, pos, tank)));
+        super(gui, x, y, 10, IDLE, () -> Mekanism.packetHandler().sendToServer(new PacketGuiInteract(GuiInteraction.GAS_MODE_BUTTON, pos, tank)));
         this.left = left;
         this.gasModeSupplier = gasModeSupplier;
     }
@@ -40,11 +40,11 @@ public class GuiGasMode extends MekanismImageButton {
     }
 
     @Override
-    public void renderForeground(MatrixStack matrix, int mouseX, int mouseY) {
+    public void renderForeground(PoseStack matrix, int mouseX, int mouseY) {
         //Draw the text next to the button
-        ITextComponent component = gasModeSupplier.get().getTextComponent();
-        int xPos = x - guiObj.getLeft();
-        int yPos = y - guiObj.getTop();
+        Component component = gasModeSupplier.get().getTextComponent();
+        int xPos = x - getGuiLeft();
+        int yPos = y - getGuiTop();
         if (left) {
             drawTextScaledBound(matrix, component, xPos - 3 - (int) (getStringWidth(component) * getNeededScale(component, 66)), yPos + 1, titleTextColor(), 66);
         } else {

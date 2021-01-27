@@ -1,9 +1,12 @@
 package mekanism.common.integration.lookingat.theoneprobe;
 
 import mcjty.theoneprobe.api.IElement;
+import mcjty.theoneprobe.api.IElementFactory;
 import mekanism.api.math.FloatingLong;
 import mekanism.common.integration.lookingat.EnergyElement;
-import net.minecraft.network.PacketBuffer;
+import mekanism.common.integration.lookingat.LookingAtUtils;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.resources.ResourceLocation;
 
 public class TOPEnergyElement extends EnergyElement implements IElement {
 
@@ -11,18 +14,27 @@ public class TOPEnergyElement extends EnergyElement implements IElement {
         super(energy, maxEnergy);
     }
 
-    public TOPEnergyElement(PacketBuffer buf) {
-        this(FloatingLong.readFromBuffer(buf), FloatingLong.readFromBuffer(buf));
-    }
-
     @Override
-    public void toBytes(PacketBuffer buf) {
+    public void toBytes(FriendlyByteBuf buf) {
         energy.writeToBuffer(buf);
         maxEnergy.writeToBuffer(buf);
     }
 
     @Override
-    public int getID() {
-        return TOPProvider.ENERGY_ELEMENT_ID;
+    public ResourceLocation getID() {
+        return LookingAtUtils.ENERGY;
+    }
+
+    public static class Factory implements IElementFactory {
+
+        @Override
+        public TOPEnergyElement createElement(FriendlyByteBuf buf) {
+            return new TOPEnergyElement(FloatingLong.readFromBuffer(buf), FloatingLong.readFromBuffer(buf));
+        }
+
+        @Override
+        public ResourceLocation getId() {
+            return LookingAtUtils.ENERGY;
+        }
     }
 }

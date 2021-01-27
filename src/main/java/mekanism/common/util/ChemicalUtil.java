@@ -1,7 +1,5 @@
 package mekanism.common.util;
 
-import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
@@ -10,9 +8,8 @@ import java.util.Set;
 import java.util.function.Predicate;
 import javax.annotation.Nonnull;
 import javax.annotation.ParametersAreNonnullByDefault;
-import mcp.MethodsReturnNonnullByDefault;
 import mekanism.api.Action;
-import mekanism.api.DataHandlerUtils;
+import mekanism.api.AutomationType;
 import mekanism.api.NBTConstants;
 import mekanism.api.chemical.Chemical;
 import mekanism.api.chemical.ChemicalStack;
@@ -29,20 +26,25 @@ import mekanism.api.chemical.pigment.Pigment;
 import mekanism.api.chemical.pigment.PigmentStack;
 import mekanism.api.chemical.slurry.Slurry;
 import mekanism.api.chemical.slurry.SlurryStack;
-import mekanism.api.inventory.AutomationType;
 import mekanism.api.providers.IChemicalProvider;
 import mekanism.api.providers.IGasProvider;
 import mekanism.api.providers.IInfuseTypeProvider;
 import mekanism.api.providers.IPigmentProvider;
 import mekanism.api.providers.ISlurryProvider;
+import mekanism.api.text.EnumColor;
+import mekanism.api.text.TextComponentUtil;
+import mekanism.common.MekanismLang;
 import mekanism.common.capabilities.Capabilities;
 import mekanism.common.content.network.distribution.ChemicalHandlerTarget;
 import mekanism.common.registries.MekanismBlocks;
+import mekanism.common.tags.MekanismTags;
 import mekanism.common.tier.ChemicalTankTier;
-import net.minecraft.item.ItemStack;
-import net.minecraft.tileentity.TileEntity;
-import net.minecraft.util.Direction;
-import net.minecraft.util.text.ITextComponent;
+import net.minecraft.ChatFormatting;
+import net.minecraft.MethodsReturnNonnullByDefault;
+import net.minecraft.core.Direction;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraftforge.common.capabilities.Capability;
 
 /**
@@ -55,15 +57,16 @@ public class ChemicalUtil {
     private ChemicalUtil() {
     }
 
-    public static <HANDLER extends IChemicalHandler<?, ?>> Capability<HANDLER> getCapabilityForChemical(Chemical<?> chemical) {
+    @SuppressWarnings("unchecked")
+    public static <CHEMICAL extends Chemical<CHEMICAL>, HANDLER extends IChemicalHandler<CHEMICAL, ?>> Capability<HANDLER> getCapabilityForChemical(CHEMICAL chemical) {
         if (chemical instanceof Gas) {
-            return (Capability<HANDLER>) Capabilities.GAS_HANDLER_CAPABILITY;
+            return (Capability<HANDLER>) Capabilities.GAS_HANDLER;
         } else if (chemical instanceof InfuseType) {
-            return (Capability<HANDLER>) Capabilities.INFUSION_HANDLER_CAPABILITY;
+            return (Capability<HANDLER>) Capabilities.INFUSION_HANDLER;
         } else if (chemical instanceof Pigment) {
-            return (Capability<HANDLER>) Capabilities.PIGMENT_HANDLER_CAPABILITY;
+            return (Capability<HANDLER>) Capabilities.PIGMENT_HANDLER;
         } else if (chemical instanceof Slurry) {
-            return (Capability<HANDLER>) Capabilities.SLURRY_HANDLER_CAPABILITY;
+            return (Capability<HANDLER>) Capabilities.SLURRY_HANDLER;
         } else {
             throw new IllegalStateException("Unknown Chemical Type: " + chemical.getClass().getName());
         }
@@ -83,6 +86,19 @@ public class ChemicalUtil {
     /**
      * Gets the empty stack matching the type of the input stack type
      */
+    public static ChemicalStack<?> getEmptyStack(ChemicalType chemicalType) {
+        return switch (chemicalType) {
+            case GAS -> GasStack.EMPTY;
+            case INFUSION -> InfusionStack.EMPTY;
+            case PIGMENT -> PigmentStack.EMPTY;
+            case SLURRY -> SlurryStack.EMPTY;
+        };
+    }
+
+    /**
+     * Gets the empty stack matching the type of the input stack type
+     */
+    @SuppressWarnings("unchecked")
     public static <STACK extends ChemicalStack<?>> STACK getEmptyStack(STACK stack) {
         if (stack instanceof GasStack) {
             return (STACK) GasStack.EMPTY;
@@ -98,20 +114,15 @@ public class ChemicalUtil {
     }
 
     /**
-     * Compares a {@link ChemicalType} with the current type of a merged chemical tank.
+     * Compares a {@link ChemicalType} with the current type of merged chemical tank.
      */
     public static boolean compareTypes(ChemicalType chemicalType, Current current) {
-        switch (chemicalType) {
-            case GAS:
-                return current == Current.GAS;
-            case INFUSION:
-                return current == Current.INFUSION;
-            case PIGMENT:
-                return current == Current.PIGMENT;
-            case SLURRY:
-                return current == Current.SLURRY;
-        }
-        throw new IllegalStateException("Unknown Chemical Type");
+        return current == switch (chemicalType) {
+            case GAS -> Current.GAS;
+            case INFUSION -> Current.INFUSION;
+            case PIGMENT -> Current.PIGMENT;
+            case SLURRY -> Current.SLURRY;
+        };
     }
 
     /**
@@ -123,6 +134,7 @@ public class ChemicalUtil {
      *
      * @apiNote Should only be called if we know that copy returns STACK
      */
+    @SuppressWarnings("unchecked")
     public static <STACK extends ChemicalStack<?>> STACK copy(STACK stack) {
         return (STACK) stack.copy();
     }
@@ -136,17 +148,23 @@ public class ChemicalUtil {
      * @return Copy of the input stack with the desired size
      */
     public static <STACK extends ChemicalStack<?>> STACK copyWithAmount(STACK stack, long amount) {
-        if (stack instanceof GasStack) {
-            return (STACK) new GasStack((GasStack) stack, amount);
-        } else if (stack instanceof InfusionStack) {
-            return (STACK) new InfusionStack((InfusionStack) stack, amount);
-        } else if (stack instanceof PigmentStack) {
-            return (STACK) new PigmentStack((PigmentStack) stack, amount);
-        } else if (stack instanceof SlurryStack) {
-            return (STACK) new SlurryStack((SlurryStack) stack, amount);
-        } else {
-            throw new IllegalStateException("Unknown Chemical Type: " + stack.getType().getClass().getName());
+        if (stack.isEmpty()) {
+            return getEmptyStack(stack);
         }
+        STACK result = copy(stack);
+        result.setAmount(amount);
+        return result;
+    }
+
+    /**
+     * Helper to get a chemical stack of the proper type.
+     *
+     * @param provider Chemical Provider
+     * @param amount   Desired size
+     */
+    @SuppressWarnings("unchecked")
+    public static <CHEMICAL extends Chemical<CHEMICAL>, STACK extends ChemicalStack<CHEMICAL>> STACK withAmount(IChemicalProvider<CHEMICAL> provider, long amount) {
+        return (STACK) provider.getStack(amount);
     }
 
     /**
@@ -166,30 +184,24 @@ public class ChemicalUtil {
      * @return empty chemical tank
      */
     private static ItemStack getEmptyChemicalTank(ChemicalTankTier tier) {
-        switch (tier) {
-            case BASIC:
-                return MekanismBlocks.BASIC_CHEMICAL_TANK.getItemStack();
-            case ADVANCED:
-                return MekanismBlocks.ADVANCED_CHEMICAL_TANK.getItemStack();
-            case ELITE:
-                return MekanismBlocks.ELITE_CHEMICAL_TANK.getItemStack();
-            case ULTIMATE:
-                return MekanismBlocks.ULTIMATE_CHEMICAL_TANK.getItemStack();
-            case CREATIVE:
-                return MekanismBlocks.CREATIVE_CHEMICAL_TANK.getItemStack();
-        }
-        return ItemStack.EMPTY;
+        return (switch (tier) {
+            case BASIC -> MekanismBlocks.BASIC_CHEMICAL_TANK;
+            case ADVANCED -> MekanismBlocks.ADVANCED_CHEMICAL_TANK;
+            case ELITE -> MekanismBlocks.ELITE_CHEMICAL_TANK;
+            case ULTIMATE -> MekanismBlocks.ULTIMATE_CHEMICAL_TANK;
+            case CREATIVE -> MekanismBlocks.CREATIVE_CHEMICAL_TANK;
+        }).getItemStack();
     }
 
     public static ItemStack getFilledVariant(ItemStack toFill, long capacity, IChemicalProvider<?> provider) {
-        if (provider instanceof IGasProvider) {
-            return getFilledVariant(toFill, ChemicalTankBuilder.GAS, capacity, (IGasProvider) provider, NBTConstants.GAS_TANKS);
-        } else if (provider instanceof IInfuseTypeProvider) {
-            return getFilledVariant(toFill, ChemicalTankBuilder.INFUSION, capacity, (IInfuseTypeProvider) provider, NBTConstants.INFUSION_TANKS);
-        } else if (provider instanceof IPigmentProvider) {
-            return getFilledVariant(toFill, ChemicalTankBuilder.PIGMENT, capacity, (IPigmentProvider) provider, NBTConstants.PIGMENT_TANKS);
-        } else if (provider instanceof ISlurryProvider) {
-            return getFilledVariant(toFill, ChemicalTankBuilder.SLURRY, capacity, (ISlurryProvider) provider, NBTConstants.SLURRY_TANKS);
+        if (provider instanceof IGasProvider gasProvider) {
+            return getFilledVariant(toFill, ChemicalTankBuilder.GAS, capacity, gasProvider, NBTConstants.GAS_TANKS);
+        } else if (provider instanceof IInfuseTypeProvider infuseTypeProvider) {
+            return getFilledVariant(toFill, ChemicalTankBuilder.INFUSION, capacity, infuseTypeProvider, NBTConstants.INFUSION_TANKS);
+        } else if (provider instanceof IPigmentProvider pigmentProvider) {
+            return getFilledVariant(toFill, ChemicalTankBuilder.PIGMENT, capacity, pigmentProvider, NBTConstants.PIGMENT_TANKS);
+        } else if (provider instanceof ISlurryProvider slurryProvider) {
+            return getFilledVariant(toFill, ChemicalTankBuilder.SLURRY, capacity, slurryProvider, NBTConstants.SLURRY_TANKS);
         } else {
             throw new IllegalStateException("Unknown Chemical Type: " + provider.getChemical().getClass().getName());
         }
@@ -199,35 +211,34 @@ public class ChemicalUtil {
     ItemStack getFilledVariant(ItemStack toFill, ChemicalTankBuilder<CHEMICAL, STACK, TANK> tankBuilder, long capacity, IChemicalProvider<CHEMICAL> provider, String key) {
         TANK dummyTank = tankBuilder.createDummy(capacity);
         //Manually handle filling it as capabilities are not necessarily loaded yet (at least not on the first call to this, which is made via fillItemGroup)
-        dummyTank.setStack((STACK) provider.getStack(dummyTank.getCapacity()));
-        ItemDataUtils.setList(toFill, key, DataHandlerUtils.writeContainers(Collections.singletonList(dummyTank)));
+        dummyTank.setStack(withAmount(provider, dummyTank.getCapacity()));
+        ItemDataUtils.writeContainers(toFill, key, Collections.singletonList(dummyTank));
         //The item is now filled return it for convenience
         return toFill;
     }
 
     public static int getRGBDurabilityForDisplay(ItemStack stack) {
-        //TODO: Technically doesn't support things where the color is part of the texture such as lava
         GasStack gasStack = StorageUtils.getStoredGasFromNBT(stack);
         if (!gasStack.isEmpty()) {
-            return gasStack.getChemicalTint();
+            return gasStack.getChemicalColorRepresentation();
         }
         InfusionStack infusionStack = StorageUtils.getStoredInfusionFromNBT(stack);
         if (!infusionStack.isEmpty()) {
-            return infusionStack.getChemicalTint();
+            return infusionStack.getChemicalColorRepresentation();
         }
         PigmentStack pigmentStack = StorageUtils.getStoredPigmentFromNBT(stack);
         if (!pigmentStack.isEmpty()) {
-            return pigmentStack.getChemicalTint();
+            return pigmentStack.getChemicalColorRepresentation();
         }
         SlurryStack slurryStack = StorageUtils.getStoredSlurryFromNBT(stack);
         if (!slurryStack.isEmpty()) {
-            return slurryStack.getChemicalTint();
+            return slurryStack.getChemicalColorRepresentation();
         }
         return 0;
     }
 
     public static boolean hasGas(ItemStack stack) {
-        return hasChemical(stack, s -> true, Capabilities.GAS_HANDLER_CAPABILITY);
+        return hasChemical(stack, s -> true, Capabilities.GAS_HANDLER);
     }
 
     public static <CHEMICAL extends Chemical<CHEMICAL>, STACK extends ChemicalStack<CHEMICAL>> boolean hasChemical(ItemStack stack, CHEMICAL type) {
@@ -250,21 +261,32 @@ public class ChemicalUtil {
         return false;
     }
 
-    public static List<ITextComponent> getAttributeTooltips(Chemical<?> chemical) {
-        List<ITextComponent> list = new ArrayList<>();
-        chemical.getAttributes().forEach(attr -> attr.addTooltipText(list));
-        return list;
+    public static void addAttributeTooltips(List<Component> tooltips, Chemical<?> chemical) {
+        chemical.getAttributes().forEach(attr -> attr.addTooltipText(tooltips));
     }
 
-    public static void emit(IChemicalTank<?, ?> tank, TileEntity from) {
+    public static void addChemicalDataToTooltip(List<Component> tooltips, Chemical<?> chemical, boolean advanced) {
+        if (!chemical.isEmptyType()) {
+            addAttributeTooltips(tooltips, chemical);
+            if (chemical instanceof Gas gas && MekanismTags.Gases.WASTE_BARREL_DECAY_LOOKUP.contains(gas)) {
+                tooltips.add(MekanismLang.DECAY_IMMUNE.translateColored(EnumColor.AQUA));
+            }
+            if (advanced) {
+                //If advanced tooltips are on, display the registry name
+                tooltips.add(TextComponentUtil.build(ChatFormatting.DARK_GRAY, chemical.getRegistryName()));
+            }
+        }
+    }
+
+    public static void emit(IChemicalTank<?, ?> tank, BlockEntity from) {
         emit(EnumSet.allOf(Direction.class), tank, from);
     }
 
-    public static void emit(Set<Direction> outputSides, IChemicalTank<?, ?> tank, TileEntity from) {
+    public static void emit(Set<Direction> outputSides, IChemicalTank<?, ?> tank, BlockEntity from) {
         emit(outputSides, tank, from, tank.getCapacity());
     }
 
-    public static void emit(Set<Direction> outputSides, IChemicalTank<?, ?> tank, TileEntity from, long maxOutput) {
+    public static void emit(Set<Direction> outputSides, IChemicalTank<?, ?> tank, BlockEntity from, long maxOutput) {
         if (!tank.isEmpty() && maxOutput > 0) {
             tank.extract(emit(outputSides, tank.extract(maxOutput, Action.SIMULATE, AutomationType.INTERNAL), from), Action.EXECUTE, AutomationType.INTERNAL);
         }
@@ -279,29 +301,22 @@ public class ChemicalUtil {
      *
      * @return the amount of chemical emitted
      */
-    public static <CHEMICAL extends Chemical<CHEMICAL>, STACK extends ChemicalStack<CHEMICAL>> long emit(Set<Direction> sides, @Nonnull STACK stack, TileEntity from) {
+    public static <CHEMICAL extends Chemical<CHEMICAL>, STACK extends ChemicalStack<CHEMICAL>> long emit(Set<Direction> sides, @Nonnull STACK stack, BlockEntity from) {
         if (stack.isEmpty() || sides.isEmpty()) {
             return 0;
         }
         Capability<IChemicalHandler<CHEMICAL, STACK>> capability = getCapabilityForChemical(stack);
-        //Fake that we have one target given we know that no sides will overlap
-        // This allows us to have slightly better performance
-        ChemicalHandlerTarget<CHEMICAL, STACK, IChemicalHandler<CHEMICAL, STACK>> target = new ChemicalHandlerTarget<>(stack);
-        EmitUtils.forEachSide(from.getWorld(), from.getPos(), sides, (acceptor, side) -> {
-            //Insert to access side
-            Direction accessSide = side.getOpposite();
-            //Collect cap
-            CapabilityUtils.getCapability(acceptor, capability, accessSide).ifPresent(handler -> {
+        ChemicalHandlerTarget<CHEMICAL, STACK, IChemicalHandler<CHEMICAL, STACK>> target = new ChemicalHandlerTarget<>(stack, 6);
+        EmitUtils.forEachSide(from.getLevel(), from.getBlockPos(), sides, (acceptor, side) -> {
+            //Insert to access side and collect the cap if it is present, and we can insert the type of the stack into it
+            CapabilityUtils.getCapability(acceptor, capability, side.getOpposite()).ifPresent(handler -> {
                 if (canInsert(handler, stack)) {
-                    target.addHandler(accessSide, handler);
+                    target.addHandler(handler);
                 }
             });
         });
-        int curHandlers = target.getHandlers().size();
-        if (curHandlers > 0) {
-            Set<ChemicalHandlerTarget<CHEMICAL, STACK, IChemicalHandler<CHEMICAL, STACK>>> targets = new ObjectOpenHashSet<>();
-            targets.add(target);
-            return EmitUtils.sendToAcceptors(targets, curHandlers, stack.getAmount(), ChemicalUtil.copy(stack));
+        if (target.getHandlerCount() > 0) {
+            return EmitUtils.sendToAcceptors(target, stack.getAmount(), ChemicalUtil.copy(stack));
         }
         return 0;
     }

@@ -1,12 +1,13 @@
 package mekanism.common.util.text;
 
 import javax.annotation.ParametersAreNonnullByDefault;
-import mcp.MethodsReturnNonnullByDefault;
+import mekanism.api.energy.IEnergyContainer;
 import mekanism.api.math.FloatingLong;
 import mekanism.api.text.IHasTextComponent;
 import mekanism.common.MekanismLang;
 import mekanism.common.util.MekanismUtils;
-import net.minecraft.util.text.ITextComponent;
+import net.minecraft.MethodsReturnNonnullByDefault;
+import net.minecraft.network.chat.Component;
 
 @ParametersAreNonnullByDefault
 @MethodsReturnNonnullByDefault
@@ -22,6 +23,10 @@ public class EnergyDisplay implements IHasTextComponent {
         this.max = max;
     }
 
+    public static EnergyDisplay of(IEnergyContainer container) {
+        return of(container.getEnergy(), container.getMaxEnergy());
+    }
+
     public static EnergyDisplay of(FloatingLong energy, FloatingLong max) {
         return new EnergyDisplay(energy, max);
     }
@@ -31,7 +36,7 @@ public class EnergyDisplay implements IHasTextComponent {
     }
 
     @Override
-    public ITextComponent getTextComponent() {
+    public Component getTextComponent() {
         if (energy.equals(FloatingLong.MAX_VALUE)) {
             return MekanismLang.INFINITE.translate();
         } else if (max.isZero()) {

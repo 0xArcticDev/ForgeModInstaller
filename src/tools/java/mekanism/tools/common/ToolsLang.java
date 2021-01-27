@@ -1,7 +1,7 @@
 package mekanism.tools.common;
 
 import mekanism.api.text.ILangEntry;
-import net.minecraft.util.Util;
+import net.minecraft.Util;
 
 public enum ToolsLang implements ILangEntry {
     HP("tooltip", "hp");
@@ -9,7 +9,7 @@ public enum ToolsLang implements ILangEntry {
     private final String key;
 
     ToolsLang(String type, String path) {
-        this(Util.makeTranslationKey(type, MekanismTools.rl(path)));
+        this(Util.makeDescriptionId(type, MekanismTools.rl(path)));
     }
 
     ToolsLang(String key) {

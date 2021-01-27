@@ -6,25 +6,27 @@ import mekanism.api.NBTConstants;
 import mekanism.api.Upgrade;
 import mekanism.api.providers.IBlockProvider;
 import mekanism.api.recipes.MekanismRecipe;
+import mekanism.api.recipes.cache.CachedRecipe.OperationTracker.RecipeError;
+import mekanism.common.integration.computer.annotation.ComputerMethod;
 import mekanism.common.inventory.container.MekanismContainer;
 import mekanism.common.inventory.container.sync.SyncableInt;
 import mekanism.common.util.MekanismUtils;
 import mekanism.common.util.UpgradeUtils;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.CompoundNBT;
-import net.minecraft.util.text.ITextComponent;
+import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.level.block.state.BlockState;
 
 public abstract class TileEntityProgressMachine<RECIPE extends MekanismRecipe> extends TileEntityRecipeMachine<RECIPE> {
 
     private int operatingTicks;
-
-    public int BASE_TICKS_REQUIRED;
-
+    protected int baseTicksRequired;
     public int ticksRequired;
 
-    protected TileEntityProgressMachine(IBlockProvider blockProvider, int baseTicksRequired) {
-        super(blockProvider);
-        ticksRequired = BASE_TICKS_REQUIRED = baseTicksRequired;
+    protected TileEntityProgressMachine(IBlockProvider blockProvider, BlockPos pos, BlockState state, List<RecipeError> errorTypes, int baseTicksRequired) {
+        super(blockProvider, pos, state, errorTypes);
+        this.baseTicksRequired = baseTicksRequired;
+        ticksRequired = this.baseTicksRequired;
     }
 
     public double getScaledProgress() {
@@ -35,8 +37,14 @@ public abstract class TileEntityProgressMachine<RECIPE extends MekanismRecipe> e
         this.operatingTicks = ticks;
     }
 
+    @ComputerMethod(nameOverride = "getRecipeProgress")
     public int getOperatingTicks() {
         return operatingTicks;
+    }
+
+    @ComputerMethod
+    public int getTicksRequired() {
+        return ticksRequired;
     }
 
     @Override
@@ -45,36 +53,34 @@ public abstract class TileEntityProgressMachine<RECIPE extends MekanismRecipe> e
     }
 
     @Override
-    public void read(@Nonnull BlockState state, @Nonnull CompoundNBT nbtTags) {
-        super.read(state, nbtTags);
-        operatingTicks = nbtTags.getInt(NBTConstants.PROGRESS);
+    public void load(@Nonnull CompoundTag nbt) {
+        super.load(nbt);
+        operatingTicks = nbt.getInt(NBTConstants.PROGRESS);
     }
 
-    @Nonnull
     @Override
-    public CompoundNBT write(@Nonnull CompoundNBT nbtTags) {
-        super.write(nbtTags);
+    public void saveAdditional(@Nonnull CompoundTag nbtTags) {
+        super.saveAdditional(nbtTags);
         nbtTags.putInt(NBTConstants.PROGRESS, getOperatingTicks());
-        return nbtTags;
     }
 
     @Override
     public void recalculateUpgrades(Upgrade upgrade) {
         super.recalculateUpgrades(upgrade);
         if (upgrade == Upgrade.SPEED) {
-            ticksRequired = MekanismUtils.getTicks(this, BASE_TICKS_REQUIRED);
+            ticksRequired = MekanismUtils.getTicks(this, baseTicksRequired);
         }
     }
 
     @Override
-    public List<ITextComponent> getInfo(Upgrade upgrade) {
+    public List<Component> getInfo(Upgrade upgrade) {
         return UpgradeUtils.getMultScaledInfo(this, upgrade);
     }
 
     @Override
     public void addContainerTrackers(MekanismContainer container) {
         super.addContainerTrackers(container);
-        container.track(SyncableInt.create(() -> operatingTicks, this::setOperatingTicks));
-        container.track(SyncableInt.create(() -> ticksRequired, value -> ticksRequired = value));
+        container.track(SyncableInt.create(this::getOperatingTicks, this::setOperatingTicks));
+        container.track(SyncableInt.create(this::getTicksRequired, value -> ticksRequired = value));
     }
 }

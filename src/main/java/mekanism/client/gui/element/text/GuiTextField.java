@@ -1,19 +1,22 @@
 package mekanism.client.gui.element.text;
 
-import com.mojang.blaze3d.matrix.MatrixStack;
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.PoseStack;
 import java.util.function.Consumer;
 import java.util.function.IntSupplier;
 import javax.annotation.Nonnull;
 import mekanism.api.functions.CharPredicate;
+import mekanism.api.functions.CharUnaryOperator;
 import mekanism.client.SpecialColors;
 import mekanism.client.gui.IGuiWrapper;
 import mekanism.client.gui.element.GuiElement;
-import mekanism.client.gui.element.GuiRelativeElement;
 import mekanism.client.gui.element.button.MekanismImageButton;
 import mekanism.client.render.MekanismRenderer;
 import mekanism.common.lib.Color;
-import net.minecraft.client.gui.widget.TextFieldWidget;
-import net.minecraft.util.text.StringTextComponent;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
 import org.lwjgl.glfw.GLFW;
 
 /**
@@ -21,16 +24,17 @@ import org.lwjgl.glfw.GLFW;
  *
  * @author aidancbrady
  */
-public class GuiTextField extends GuiRelativeElement {
+public class GuiTextField extends GuiElement {
 
     public static final int DEFAULT_BORDER_COLOR = 0xFFA0A0A0;
     public static final int DEFAULT_BACKGROUND_COLOR = 0xFF000000;
     public static final IntSupplier SCREEN_COLOR = SpecialColors.TEXT_SCREEN::argb;
     public static final IntSupplier DARK_SCREEN_COLOR = () -> Color.argb(SCREEN_COLOR.getAsInt()).darken(0.4).argb();
 
-    private final TextFieldWidget textField;
+    private final EditBox textField;
     private Runnable enterHandler;
     private CharPredicate inputValidator;
+    private CharUnaryOperator inputTransformer;
     private Consumer<String> responder;
 
     private BackgroundType backgroundType = BackgroundType.DEFAULT;
@@ -44,17 +48,17 @@ public class GuiTextField extends GuiRelativeElement {
     public GuiTextField(IGuiWrapper gui, int x, int y, int width, int height) {
         super(gui, x, y, width, height);
 
-        textField = new TextFieldWidget(getFont(), this.x, this.y, width, height, StringTextComponent.EMPTY);
-        textField.setEnableBackgroundDrawing(false);
+        textField = new EditBox(getFont(), this.x, this.y, width, height, Component.empty());
+        textField.setBordered(false);
         textField.setResponder(s -> {
             if (responder != null) {
                 responder.accept(s);
             }
             if (checkmarkButton != null) {
-                checkmarkButton.active = !textField.getText().isEmpty();
+                checkmarkButton.active = !textField.getValue().isEmpty();
             }
         });
-        guiObj.addFocusListener(this);
+        gui().addFocusListener(this);
         updateTextField();
     }
 
@@ -107,6 +111,11 @@ public class GuiTextField extends GuiRelativeElement {
         return this;
     }
 
+    public GuiTextField setInputTransformer(CharUnaryOperator inputTransformer) {
+        this.inputTransformer = inputTransformer;
+        return this;
+    }
+
     public GuiTextField setBackground(BackgroundType backgroundType) {
         this.backgroundType = backgroundType;
         return this;
@@ -123,7 +132,7 @@ public class GuiTextField extends GuiRelativeElement {
     }
 
     public GuiTextField addCheckmarkButton(ButtonType type, Runnable callback) {
-        addChild(checkmarkButton = type.getButton(this, () -> {
+        checkmarkButton = addChild(type.getButton(this, () -> {
             callback.run();
             setFocused(true);
         }));
@@ -134,8 +143,9 @@ public class GuiTextField extends GuiRelativeElement {
 
     private void updateTextField() {
         //width is scaled based on text scale
-        textField.setWidth(Math.round((width - (checkmarkButton != null ? textField.getHeightRealms() + 2 : 0) - (iconType != null ? iconType.getOffsetX() : 0)) * (1 / textScale)));
-        textField.x = x + textOffsetX + 2 + (iconType != null ? iconType.getOffsetX() : 0);
+        int iconOffsetX = iconType == null ? 0 : iconType.getOffsetX();
+        textField.setWidth(Math.round((width - (checkmarkButton == null ? 0 : textField.getHeight() + 2) - iconOffsetX) * (1 / textScale)));
+        textField.setX(x + textOffsetX + 2 + iconOffsetX);
         textField.y = y + textOffsetY + 1 + (int) ((height / 2F) - 4);
     }
 
@@ -146,7 +156,7 @@ public class GuiTextField extends GuiRelativeElement {
     @Override
     public void onWindowClose() {
         super.onWindowClose();
-        guiObj.removeFocusListener(this);
+        gui().removeFocusListener(this);
     }
 
     @Override
@@ -172,32 +182,43 @@ public class GuiTextField extends GuiRelativeElement {
         boolean ret = textField.mouseClicked(scaledX, mouseY, button);
         // detect if we're now focused
         if (!prevFocus && isTextFieldFocused()) {
-            guiObj.focusChange(this);
+            gui().focusChange(this);
         }
         return ret || super.mouseClicked(mouseX, mouseY, button);
     }
 
     @Override
-    public void drawBackground(@Nonnull MatrixStack matrix, int mouseX, int mouseY, float partialTicks) {
+    public void drawBackground(@Nonnull PoseStack matrix, int mouseX, int mouseY, float partialTicks) {
         super.drawBackground(matrix, mouseX, mouseY, partialTicks);
         backgroundType.render(this, matrix);
-        if (textScale != 1F) {
+        if (textScale == 1F) {
+            renderTextField(matrix, mouseX, mouseY, partialTicks);
+        } else {
             // hacky. we should write our own renderer at some point.
             float reverse = (1 / textScale) - 1;
             float yAdd = 4 - (textScale * 8) / 2F;
-            matrix.push();
+            matrix.pushPose();
             matrix.scale(textScale, textScale, textScale);
             matrix.translate(textField.x * reverse, (textField.y) * reverse + yAdd * (1 / textScale), 0);
-            textField.render(matrix, mouseX, mouseY, 0);
-            matrix.pop();
-        } else {
-            textField.render(matrix, mouseX, mouseY, 0);
+            renderTextField(matrix, mouseX, mouseY, partialTicks);
+            matrix.popPose();
         }
         MekanismRenderer.resetColor();
         if (iconType != null) {
-            minecraft.textureManager.bindTexture(iconType.getIcon());
+            RenderSystem.setShaderTexture(0, iconType.getIcon());
             blit(matrix, x + 2, y + (height / 2) - (int) Math.ceil(iconType.getHeight() / 2F), 0, 0, iconType.getWidth(), iconType.getHeight(), iconType.getWidth(), iconType.getHeight());
         }
+    }
+
+    private void renderTextField(@Nonnull PoseStack matrix, int mouseX, int mouseY, float partialTicks) {
+        //Apply matrix via render system so that it applies to the highlight
+        PoseStack modelViewStack = RenderSystem.getModelViewStack();
+        modelViewStack.pushPose();
+        modelViewStack.mulPoseMatrix(matrix.last().pose());
+        RenderSystem.applyModelViewMatrix();
+        textField.render(new PoseStack(), mouseX, mouseY, partialTicks);
+        modelViewStack.popPose();
+        RenderSystem.applyModelViewMatrix();
     }
 
     @Override
@@ -208,7 +229,7 @@ public class GuiTextField extends GuiRelativeElement {
     @Override
     public void syncFrom(GuiElement element) {
         super.syncFrom(element);
-        textField.setText(((GuiTextField) element).getText());
+        textField.setValue(((GuiTextField) element).getText());
         setFocused(element.isFocused());
     }
 
@@ -224,11 +245,35 @@ public class GuiTextField extends GuiRelativeElement {
                     enterHandler.run();
                 }
                 return true;
-            } else if (keyCode == GLFW.GLFW_KEY_TAB) {
-                guiObj.incrementFocus(this);
+            } else if (keyCode == GLFW.GLFW_KEY_TAB && textField.canLoseFocus) {
+                gui().incrementFocus(this);
                 return true;
+            } else if (Screen.isPaste(keyCode)) {
+                //Manual handling of textField#keyPressed for pasting so that we can filter things as needed
+                String text = Minecraft.getInstance().keyboardHandler.getClipboard();
+                if (inputTransformer != null || inputValidator != null) {
+                    boolean transformed = false;
+                    char[] charArray = text.toCharArray();
+                    for (int i = 0; i < charArray.length; i++) {
+                        char c = charArray[i];
+                        if (inputTransformer != null) {
+                            c = inputTransformer.applyAsChar(c);
+                            charArray[i] = c;
+                            transformed = true;
+                        }
+                        if (inputValidator != null && !inputValidator.test(c)) {
+                            //Contains an invalid character fail
+                            return false;
+                        }
+                    }
+                    if (transformed) {
+                        text = String.copyValueOf(charArray);
+                    }
+                }
+                textField.insertText(text);
+            } else {
+                textField.keyPressed(keyCode, scanCode, modifiers);
             }
-            textField.keyPressed(keyCode, scanCode, modifiers);
             return true;
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
@@ -237,6 +282,9 @@ public class GuiTextField extends GuiRelativeElement {
     @Override
     public boolean charTyped(char c, int keyCode) {
         if (canWrite()) {
+            if (inputTransformer != null) {
+                c = inputTransformer.applyAsChar(c);
+            }
             if (inputValidator == null || inputValidator.test(c)) {
                 return textField.charTyped(c, keyCode);
             }
@@ -246,40 +294,62 @@ public class GuiTextField extends GuiRelativeElement {
     }
 
     public String getText() {
-        return textField.getText();
+        return textField.getValue();
     }
 
     public void setVisible(boolean visible) {
         textField.setVisible(visible);
     }
 
-    public void setMaxStringLength(int length) {
-        textField.setMaxStringLength(length);
+    public void setMaxLength(int length) {
+        textField.setMaxLength(length);
     }
 
     public void setTextColor(int color) {
         textField.setTextColor(color);
     }
 
-    public void setEnabled(boolean enabled) {
-        textField.setEnabled(enabled);
+    public void setTextColorUneditable(int color) {
+        textField.setTextColorUneditable(color);
+    }
+
+    public void setEditable(boolean enabled) {
+        textField.setEditable(enabled);
+    }
+
+    public void setCanLoseFocus(boolean canLoseFocus) {
+        //TODO: Improve handling of when this is set to false in regards to focus changing with tab or things
+        textField.setCanLoseFocus(canLoseFocus);
     }
 
     @Override
     public void setFocused(boolean focused) {
         super.setFocused(focused);
-        textField.setFocused2(focused);
+        textField.setFocus(focused);
         if (focused) {
-            guiObj.focusChange(this);
+            gui().focusChange(this);
+        }
+    }
+
+    @Override
+    public boolean changeFocus(boolean focused) {
+        return visible && textField.isEditable() && super.changeFocus(focused);
+    }
+
+    @Override
+    protected void onFocusedChanged(boolean focused) {
+        super.onFocusedChanged(focused);
+        if (focused) {
+            textField.frame = 0;
         }
     }
 
     public boolean canWrite() {
-        return textField.canWrite();
+        return textField.canConsumeInput();
     }
 
     public void setText(String text) {
-        textField.setText(text);
+        textField.setValue(text);
     }
 
     public void setResponder(Consumer<String> responder) {

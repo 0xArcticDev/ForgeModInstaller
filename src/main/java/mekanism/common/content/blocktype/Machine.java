@@ -6,32 +6,27 @@ import mekanism.api.Upgrade;
 import mekanism.common.MekanismLang;
 import mekanism.common.block.attribute.AttributeFactoryType;
 import mekanism.common.block.attribute.AttributeParticleFX;
-import mekanism.common.block.attribute.AttributeStateActive;
 import mekanism.common.block.attribute.AttributeStateFacing;
 import mekanism.common.block.attribute.AttributeUpgradeSupport;
 import mekanism.common.block.attribute.AttributeUpgradeable;
-import mekanism.common.block.attribute.Attributes.AttributeComparator;
-import mekanism.common.block.attribute.Attributes.AttributeInventory;
-import mekanism.common.block.attribute.Attributes.AttributeRedstone;
-import mekanism.common.block.attribute.Attributes.AttributeSecurity;
+import mekanism.common.block.attribute.Attributes;
 import mekanism.common.lib.math.Pos3D;
 import mekanism.common.registration.impl.TileEntityTypeRegistryObject;
 import mekanism.common.registries.MekanismBlocks;
 import mekanism.common.tier.FactoryTier;
 import mekanism.common.tile.base.TileEntityMekanism;
-import net.minecraft.particles.ParticleTypes;
-import net.minecraft.particles.RedstoneParticleData;
+import net.minecraft.core.particles.DustParticleOptions;
+import net.minecraft.core.particles.ParticleTypes;
 
 public class Machine<TILE extends TileEntityMekanism> extends BlockTypeTile<TILE> {
 
     public Machine(Supplier<TileEntityTypeRegistryObject<TILE>> tileEntityRegistrar, MekanismLang description) {
         super(tileEntityRegistrar, description);
-
         // add default particle effects
         add(new AttributeParticleFX()
               .add(ParticleTypes.SMOKE, rand -> new Pos3D(rand.nextFloat() * 0.6F - 0.3F, rand.nextFloat() * 6.0F / 16.0F, 0.52))
-              .add(RedstoneParticleData.REDSTONE_DUST, rand -> new Pos3D(rand.nextFloat() * 0.6F - 0.3F, rand.nextFloat() * 6.0F / 16.0F, 0.52)));
-        add(new AttributeStateActive(), new AttributeStateFacing(), new AttributeInventory(), new AttributeSecurity(), new AttributeRedstone(), new AttributeComparator());
+              .add(DustParticleOptions.REDSTONE, rand -> new Pos3D(rand.nextFloat() * 0.6F - 0.3F, rand.nextFloat() * 6.0F / 16.0F, 0.52)));
+        add(Attributes.ACTIVE_LIGHT, new AttributeStateFacing(), Attributes.INVENTORY, Attributes.SECURITY, Attributes.REDSTONE, Attributes.COMPARATOR);
         add(new AttributeUpgradeSupport(EnumSet.of(Upgrade.SPEED, Upgrade.ENERGY, Upgrade.MUFFLING)));
     }
 

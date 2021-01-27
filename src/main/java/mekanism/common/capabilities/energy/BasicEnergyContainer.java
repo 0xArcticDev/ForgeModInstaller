@@ -4,17 +4,17 @@ import java.util.Objects;
 import java.util.function.Predicate;
 import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
-import mcp.MethodsReturnNonnullByDefault;
 import mekanism.api.Action;
+import mekanism.api.AutomationType;
 import mekanism.api.IContentsListener;
 import mekanism.api.NBTConstants;
 import mekanism.api.annotations.FieldsAreNonnullByDefault;
 import mekanism.api.annotations.NonNull;
 import mekanism.api.energy.IEnergyContainer;
-import mekanism.api.inventory.AutomationType;
 import mekanism.api.math.FloatingLong;
 import mekanism.common.util.NBTUtils;
-import net.minecraft.nbt.CompoundNBT;
+import net.minecraft.MethodsReturnNonnullByDefault;
+import net.minecraft.nbt.CompoundTag;
 
 @FieldsAreNonnullByDefault
 @ParametersAreNonnullByDefault
@@ -92,8 +92,8 @@ public class BasicEnergyContainer implements IEnergyContainer {
      *
      * @return The rate this tank can insert/extract at.
      *
-     * @implNote By default this returns {@link FloatingLong#MAX_VALUE} so as to not actually limit the container's rate. By default this is also ignored for direct
-     * setting of the stack/stack size
+     * @implNote By default, this returns {@link FloatingLong#MAX_VALUE} to not actually limit the container's rate. By default, this is also ignored for direct setting
+     * of the stack/stack size
      */
     protected FloatingLong getRate(@Nullable AutomationType automationType) {
         //TODO: Decide if we want to split this into a rate for inserting and a rate for extracting.
@@ -155,8 +155,8 @@ public class BasicEnergyContainer implements IEnergyContainer {
      * @implNote Overwritten so that if we decide to change to returning a cached/copy of our value in {@link #getEnergy()}, we can optimize out the copying.
      */
     @Override
-    public CompoundNBT serializeNBT() {
-        CompoundNBT nbt = new CompoundNBT();
+    public CompoundTag serializeNBT() {
+        CompoundTag nbt = new CompoundTag();
         if (!isEmpty()) {
             nbt.putString(NBTConstants.STORED, stored.toString());
         }
@@ -164,7 +164,7 @@ public class BasicEnergyContainer implements IEnergyContainer {
     }
 
     @Override
-    public void deserializeNBT(CompoundNBT nbt) {
+    public void deserializeNBT(CompoundTag nbt) {
         NBTUtils.setFloatingLongIfPresent(nbt, NBTConstants.STORED, this::setEnergy);
     }
 }

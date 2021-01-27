@@ -3,10 +3,10 @@ package mekanism.common.recipe.upgrade;
 import java.util.UUID;
 import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
+import mekanism.api.MekanismAPI;
 import mekanism.api.annotations.FieldsAreNonnullByDefault;
-import mekanism.common.lib.security.ISecurityItem;
-import mekanism.common.lib.security.SecurityMode;
-import net.minecraft.item.ItemStack;
+import mekanism.api.security.SecurityMode;
+import net.minecraft.world.item.ItemStack;
 
 @FieldsAreNonnullByDefault
 @ParametersAreNonnullByDefault
@@ -25,19 +25,14 @@ public class SecurityRecipeData implements RecipeUpgradeData<SecurityRecipeData>
     public SecurityRecipeData merge(SecurityRecipeData other) {
         if (owner.equals(other.owner)) {
             //Pick the most restrictive security mode
-            //TODO: Do this a better way at some point than just using ordinals
-            return new SecurityRecipeData(owner, SecurityMode.byIndexStatic(Math.max(mode.ordinal(), other.mode.ordinal())));
+            return MekanismAPI.getSecurityUtils().moreRestrictive(mode, other.mode) ? other : this;
         }
         //If the owners don't match fail
         return null;
-
     }
 
     @Override
     public boolean applyToStack(ItemStack stack) {
-        ISecurityItem securityItem = (ISecurityItem) stack.getItem();
-        securityItem.setOwnerUUID(stack, owner);
-        securityItem.setSecurity(stack, mode);
         return true;
     }
 }

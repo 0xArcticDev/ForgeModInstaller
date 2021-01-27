@@ -12,10 +12,10 @@ import java.util.UUID;
 import mekanism.additions.common.MekanismAdditions;
 import mekanism.additions.common.item.ItemWalkieTalkie;
 import mekanism.common.Mekanism;
-import net.minecraft.entity.player.ServerPlayerEntity;
-import net.minecraft.item.ItemStack;
 import net.minecraft.server.MinecraftServer;
-import net.minecraftforge.fml.server.ServerLifecycleHooks;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.item.ItemStack;
+import net.minecraftforge.server.ServerLifecycleHooks;
 
 public class VoiceConnection extends Thread {
 
@@ -35,35 +35,36 @@ public class VoiceConnection extends Thread {
         try {
             input = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
             output = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
-            synchronized (MekanismAdditions.voiceManager) {
-                int retryCount = 0;
-                while (uuid == null && retryCount <= 100) {
-                    try {
-                        List<ServerPlayerEntity> l = Collections.synchronizedList(new ArrayList<>(server.getPlayerList().getPlayers()));
-
-                        for (ServerPlayerEntity playerMP : l) {
-                            String playerIP = playerMP.getPlayerIP();
-                            if (!server.isDedicatedServer() && playerIP.equals("local") && !MekanismAdditions.voiceManager.isFoundLocal()) {
-                                MekanismAdditions.voiceManager.setFoundLocal(true);
-                                uuid = playerMP.getUniqueID();
-                                break;
-                            } else if (playerIP.equals(socket.getInetAddress().getHostAddress())) {
-                                uuid = playerMP.getUniqueID();
-                                break;
+            if (MekanismAdditions.voiceManager != null) {
+                synchronized (MekanismAdditions.voiceManager) {
+                    int retryCount = 0;
+                    while (uuid == null && retryCount <= 100) {
+                        try {
+                            List<ServerPlayer> players = Collections.synchronizedList(new ArrayList<>(server.getPlayerList().getPlayers()));
+                            for (ServerPlayer player : players) {
+                                String playerIP = player.getIpAddress();
+                                if (!server.isDedicatedServer() && playerIP.equals("local") && !MekanismAdditions.voiceManager.isFoundLocal()) {
+                                    MekanismAdditions.voiceManager.setFoundLocal(true);
+                                    uuid = player.getUUID();
+                                    break;
+                                } else if (playerIP.equals(socket.getInetAddress().getHostAddress())) {
+                                    uuid = player.getUUID();
+                                    break;
+                                }
                             }
+                            retryCount++;
+                            Thread.sleep(50);
+                        } catch (Exception ignored) {
                         }
-                        retryCount++;
-                        Thread.sleep(50);
-                    } catch (Exception ignored) {
                     }
-                }
 
-                if (uuid == null) {
-                    Mekanism.logger.error("VoiceServer: Unable to trace connection's IP address.");
-                    kill();
-                    return;
-                } else {
-                    Mekanism.logger.info("VoiceServer: Traced IP in {} attempts.", retryCount);
+                    if (uuid == null) {
+                        Mekanism.logger.error("VoiceServer: Unable to trace connection's IP address.");
+                        kill();
+                        return;
+                    } else {
+                        Mekanism.logger.info("VoiceServer: Traced IP for {} in {} attempts.", uuid, retryCount);
+                    }
                 }
             }
         } catch (Exception e) {
@@ -85,10 +86,9 @@ public class VoiceConnection extends Thread {
                     open = false;
                 }
             }
-            if (!open) {
-                kill();
-            }
-        }).start();
+            //No longer open, kill it
+            kill();
+        }, "Voice Server Client Listen Thread").start();
     }
 
     private void kill() {
@@ -122,30 +122,26 @@ public class VoiceConnection extends Thread {
     }
 
     public boolean canListen(int channel) {
-        return getPlayer().inventory.mainInventory.stream().anyMatch(itemStack -> canListen(channel, itemStack))
-               || getPlayer().inventory.offHandInventory.stream().anyMatch(itemStack -> canListen(channel, itemStack));
+        ServerPlayer player = getPlayer();
+        return player.getInventory().items.stream().anyMatch(itemStack -> canListen(channel, itemStack)) || canListen(channel, player.getOffhandItem());
     }
 
     private boolean canListen(int channel, ItemStack itemStack) {
-        if (!itemStack.isEmpty() && itemStack.getItem() instanceof ItemWalkieTalkie) {
-            ItemWalkieTalkie walkieTalkie = (ItemWalkieTalkie) itemStack.getItem();
+        if (!itemStack.isEmpty() && itemStack.getItem() instanceof ItemWalkieTalkie walkieTalkie) {
             return walkieTalkie.getOn(itemStack) && walkieTalkie.getChannel(itemStack) == channel;
         }
         return false;
     }
 
     public int getCurrentChannel() {
-        ItemStack itemStack = getPlayer().inventory.getCurrentItem();
-        if (!itemStack.isEmpty() && itemStack.getItem() instanceof ItemWalkieTalkie) {
-            ItemWalkieTalkie walkieTalkie = (ItemWalkieTalkie) itemStack.getItem();
-            if (walkieTalkie.getOn(itemStack)) {
-                return walkieTalkie.getChannel(itemStack);
-            }
+        ItemStack itemStack = getPlayer().getInventory().getSelected();
+        if (!itemStack.isEmpty() && itemStack.getItem() instanceof ItemWalkieTalkie walkieTalkie && walkieTalkie.getOn(itemStack)) {
+            return walkieTalkie.getChannel(itemStack);
         }
         return 0;
     }
 
-    public ServerPlayerEntity getPlayer() {
-        return server.getPlayerList().getPlayerByUUID(uuid);
+    public ServerPlayer getPlayer() {
+        return server.getPlayerList().getPlayer(uuid);
     }
 }

@@ -1,20 +1,20 @@
 package mekanism.common.capabilities.fluid.item;
 
 import java.util.List;
+import java.util.function.Consumer;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
-import mcp.MethodsReturnNonnullByDefault;
-import mekanism.api.DataHandlerUtils;
 import mekanism.api.NBTConstants;
 import mekanism.api.fluid.IExtendedFluidTank;
 import mekanism.api.fluid.IMekanismFluidHandler;
-import mekanism.common.capabilities.CapabilityCache;
 import mekanism.common.capabilities.ItemCapabilityWrapper.ItemCapability;
 import mekanism.common.capabilities.resolver.BasicCapabilityResolver;
+import mekanism.common.capabilities.resolver.ICapabilityResolver;
 import mekanism.common.util.ItemDataUtils;
-import net.minecraft.item.ItemStack;
-import net.minecraft.util.Direction;
+import net.minecraft.MethodsReturnNonnullByDefault;
+import net.minecraft.core.Direction;
+import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.fluids.capability.CapabilityFluidHandler;
 import net.minecraftforge.fluids.capability.IFluidHandlerItem;
 
@@ -31,15 +31,14 @@ public abstract class ItemStackMekanismFluidHandler extends ItemCapability imple
 
     @Override
     protected void init() {
+        super.init();
         this.tanks = getInitialTanks();
     }
 
     @Override
     protected void load() {
-        ItemStack stack = getStack();
-        if (!stack.isEmpty()) {
-            DataHandlerUtils.readContainers(getFluidTanks(null), ItemDataUtils.getList(stack, NBTConstants.FLUID_TANKS));
-        }
+        super.load();
+        ItemDataUtils.readContainers(getStack(), NBTConstants.FLUID_TANKS, getFluidTanks(null));
     }
 
     @Nonnull
@@ -50,10 +49,7 @@ public abstract class ItemStackMekanismFluidHandler extends ItemCapability imple
 
     @Override
     public void onContentsChanged() {
-        ItemStack stack = getStack();
-        if (!stack.isEmpty()) {
-            ItemDataUtils.setList(stack, NBTConstants.FLUID_TANKS, DataHandlerUtils.writeContainers(getFluidTanks(null)));
-        }
+        ItemDataUtils.writeContainers(getStack(), NBTConstants.FLUID_TANKS, getFluidTanks(null));
     }
 
     @Nonnull
@@ -63,7 +59,7 @@ public abstract class ItemStackMekanismFluidHandler extends ItemCapability imple
     }
 
     @Override
-    protected void addCapabilityResolvers(CapabilityCache capabilityCache) {
-        capabilityCache.addCapabilityResolver(BasicCapabilityResolver.constant(CapabilityFluidHandler.FLUID_HANDLER_ITEM_CAPABILITY, this));
+    protected void gatherCapabilityResolvers(Consumer<ICapabilityResolver> consumer) {
+        consumer.accept(BasicCapabilityResolver.constant(CapabilityFluidHandler.FLUID_HANDLER_ITEM_CAPABILITY, this));
     }
 }

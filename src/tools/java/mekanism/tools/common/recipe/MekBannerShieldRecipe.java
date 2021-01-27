@@ -4,27 +4,27 @@ import javax.annotation.Nonnull;
 import mekanism.api.NBTConstants;
 import mekanism.tools.common.item.ItemMekanismShield;
 import mekanism.tools.common.registries.ToolsRecipeSerializers;
-import net.minecraft.inventory.CraftingInventory;
-import net.minecraft.item.BannerItem;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.crafting.IRecipeSerializer;
-import net.minecraft.item.crafting.SpecialRecipe;
-import net.minecraft.nbt.CompoundNBT;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.world.World;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.inventory.CraftingContainer;
+import net.minecraft.world.item.BannerItem;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.CustomRecipe;
+import net.minecraft.world.item.crafting.RecipeSerializer;
+import net.minecraft.world.level.Level;
 
-public class MekBannerShieldRecipe extends SpecialRecipe {
+public class MekBannerShieldRecipe extends CustomRecipe {
 
     public MekBannerShieldRecipe(ResourceLocation id) {
         super(id);
     }
 
     @Override
-    public boolean matches(CraftingInventory inv, @Nonnull World world) {
+    public boolean matches(CraftingContainer inv, @Nonnull Level world) {
         ItemStack shieldStack = ItemStack.EMPTY;
         ItemStack bannerStack = ItemStack.EMPTY;
-        for (int i = 0; i < inv.getSizeInventory(); ++i) {
-            ItemStack stackInSlot = inv.getStackInSlot(i);
+        for (int i = 0; i < inv.getContainerSize(); ++i) {
+            ItemStack stackInSlot = inv.getItem(i);
             if (!stackInSlot.isEmpty()) {
                 if (stackInSlot.getItem() instanceof BannerItem) {
                     if (!bannerStack.isEmpty()) {
@@ -32,7 +32,7 @@ public class MekBannerShieldRecipe extends SpecialRecipe {
                     }
                     bannerStack = stackInSlot;
                 } else {
-                    if (!(stackInSlot.getItem() instanceof ItemMekanismShield) || !shieldStack.isEmpty() || stackInSlot.getChildTag(NBTConstants.BLOCK_ENTITY_TAG) != null) {
+                    if (!(stackInSlot.getItem() instanceof ItemMekanismShield) || !shieldStack.isEmpty() || stackInSlot.getTagElement(NBTConstants.BLOCK_ENTITY_TAG) != null) {
                         return false;
                     }
                     shieldStack = stackInSlot;
@@ -44,11 +44,11 @@ public class MekBannerShieldRecipe extends SpecialRecipe {
 
     @Nonnull
     @Override
-    public ItemStack getCraftingResult(CraftingInventory inv) {
+    public ItemStack assemble(CraftingContainer inv) {
         ItemStack bannerStack = ItemStack.EMPTY;
         ItemStack shieldStack = ItemStack.EMPTY;
-        for (int i = 0; i < inv.getSizeInventory(); ++i) {
-            ItemStack stackInSlot = inv.getStackInSlot(i);
+        for (int i = 0; i < inv.getContainerSize(); ++i) {
+            ItemStack stackInSlot = inv.getItem(i);
             if (!stackInSlot.isEmpty()) {
                 if (stackInSlot.getItem() instanceof BannerItem) {
                     bannerStack = stackInSlot;
@@ -60,21 +60,21 @@ public class MekBannerShieldRecipe extends SpecialRecipe {
         if (shieldStack.isEmpty()) {
             return ItemStack.EMPTY;
         }
-        CompoundNBT blockEntityTag = bannerStack.getChildTag(NBTConstants.BLOCK_ENTITY_TAG);
-        CompoundNBT tag = blockEntityTag == null ? new CompoundNBT() : blockEntityTag.copy();
+        CompoundTag blockEntityTag = bannerStack.getTagElement(NBTConstants.BLOCK_ENTITY_TAG);
+        CompoundTag tag = blockEntityTag == null ? new CompoundTag() : blockEntityTag.copy();
         tag.putInt(NBTConstants.BASE, ((BannerItem) bannerStack.getItem()).getColor().getId());
-        shieldStack.setTagInfo(NBTConstants.BLOCK_ENTITY_TAG, tag);
+        shieldStack.addTagElement(NBTConstants.BLOCK_ENTITY_TAG, tag);
         return shieldStack;
     }
 
     @Override
-    public boolean canFit(int width, int height) {
+    public boolean canCraftInDimensions(int width, int height) {
         return width * height >= 2;
     }
 
     @Nonnull
     @Override
-    public IRecipeSerializer<?> getSerializer() {
+    public RecipeSerializer<?> getSerializer() {
         return ToolsRecipeSerializers.BANNER_SHIELD.get();
     }
 }

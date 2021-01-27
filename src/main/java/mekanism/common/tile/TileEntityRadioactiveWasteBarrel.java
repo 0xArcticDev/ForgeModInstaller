@@ -1,9 +1,11 @@
 package mekanism.common.tile;
 
-import java.util.EnumSet;
+import java.util.Collections;
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import mekanism.api.Action;
 import mekanism.api.IConfigurable;
+import mekanism.api.IContentsListener;
 import mekanism.api.NBTConstants;
 import mekanism.api.RelativeSide;
 import mekanism.api.chemical.gas.Gas;
@@ -15,64 +17,65 @@ import mekanism.common.capabilities.holder.chemical.ChemicalTankHelper;
 import mekanism.common.capabilities.holder.chemical.IChemicalTankHolder;
 import mekanism.common.capabilities.resolver.BasicCapabilityResolver;
 import mekanism.common.config.MekanismConfig;
+import mekanism.common.integration.computer.SpecialComputerMethodWrapper.ComputerChemicalTankWrapper;
+import mekanism.common.integration.computer.annotation.WrappingComputerMethod;
 import mekanism.common.registries.MekanismBlocks;
 import mekanism.common.tags.MekanismTags;
+import mekanism.common.tile.base.SubstanceType;
 import mekanism.common.tile.base.TileEntityMekanism;
 import mekanism.common.util.ChemicalUtil;
 import mekanism.common.util.MekanismUtils;
 import mekanism.common.util.NBTUtils;
-import net.minecraft.block.BlockState;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.nbt.CompoundNBT;
-import net.minecraft.util.ActionResultType;
-import net.minecraft.util.Direction;
-import net.minecraft.util.SoundCategory;
-import net.minecraft.util.SoundEvents;
-import net.minecraft.world.World;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
 
 public class TileEntityRadioactiveWasteBarrel extends TileEntityMekanism implements IConfigurable {
 
-    private static final float TOLERANCE = 0.05F;
-
     private long lastProcessTick;
+    @WrappingComputerMethod(wrapper = ComputerChemicalTankWrapper.class, methodNames = {"getStored", "getCapacity", "getNeeded", "getFilledPercentage"})
     private StackedWasteBarrel gasTank;
     private float prevScale;
     private int processTicks;
 
-    public TileEntityRadioactiveWasteBarrel() {
-        super(MekanismBlocks.RADIOACTIVE_WASTE_BARREL);
-        addCapabilityResolver(BasicCapabilityResolver.constant(Capabilities.CONFIGURABLE_CAPABILITY, this));
+    public TileEntityRadioactiveWasteBarrel(BlockPos pos, BlockState state) {
+        super(MekanismBlocks.RADIOACTIVE_WASTE_BARREL, pos, state);
+        addCapabilityResolver(BasicCapabilityResolver.constant(Capabilities.CONFIGURABLE, this));
     }
 
     @Nonnull
     @Override
-    public IChemicalTankHolder<Gas, GasStack, IGasTank> getInitialGasTanks() {
+    public IChemicalTankHolder<Gas, GasStack, IGasTank> getInitialGasTanks(IContentsListener listener) {
         ChemicalTankHelper<Gas, GasStack, IGasTank> builder = ChemicalTankHelper.forSide(this::getDirection);
-        builder.addTank(gasTank = StackedWasteBarrel.create(this), RelativeSide.TOP, RelativeSide.BOTTOM);
+        builder.addTank(gasTank = StackedWasteBarrel.create(this, listener), RelativeSide.TOP, RelativeSide.BOTTOM);
         return builder.build();
     }
 
     @Override
     protected void onUpdateServer() {
         super.onUpdateServer();
-        if (world.getGameTime() > lastProcessTick) {
+        if (level.getGameTime() > lastProcessTick) {
             //If we are not on the same tick do stuff, otherwise ignore it (anti tick accelerator protection)
-            lastProcessTick = world.getGameTime();
+            lastProcessTick = level.getGameTime();
             if (MekanismConfig.general.radioactiveWasteBarrelDecayAmount.get() > 0 && !gasTank.isEmpty() &&
-                !gasTank.getType().isIn(MekanismTags.Gases.WASTE_BARREL_DECAY_BLACKLIST) &&
+                !MekanismTags.Gases.WASTE_BARREL_DECAY_LOOKUP.contains(gasTank.getType()) &&
                 ++processTicks >= MekanismConfig.general.radioactiveWasteBarrelProcessTicks.get()) {
                 processTicks = 0;
                 gasTank.shrinkStack(MekanismConfig.general.radioactiveWasteBarrelDecayAmount.get(), Action.EXECUTE);
             }
             if (getActive()) {
-                ChemicalUtil.emit(EnumSet.of(Direction.DOWN), gasTank, this);
+                ChemicalUtil.emit(Collections.singleton(Direction.DOWN), gasTank, this);
             }
-
-            float scale = getGasScale();
-            if (Math.abs(scale - prevScale) > TOLERANCE) {
-                sendUpdatePacket();
-                prevScale = scale;
-            }
+            //Note: We don't need to do any checking here if the packet needs due to capacity changing as we do it
+            // in TileentityMekanism after this method is called. And given radioactive waste barrels can only contain
+            // radioactive substances the check for radiation scale also will work for syncing capacity for purposes
+            // of when the client sneak right-clicks on the barrel
         }
     }
 
@@ -80,8 +83,8 @@ public class TileEntityRadioactiveWasteBarrel extends TileEntityMekanism impleme
         return gasTank;
     }
 
-    public float getGasScale() {
-        return gasTank.getStored() / (float) gasTank.getCapacity();
+    public double getGasScale() {
+        return gasTank.getStored() / (double) gasTank.getCapacity();
     }
 
     public GasStack getGas() {
@@ -89,44 +92,34 @@ public class TileEntityRadioactiveWasteBarrel extends TileEntityMekanism impleme
     }
 
     @Override
-    public boolean renderUpdate() {
-        return true;
-    }
-
-    @Override
-    public boolean lightUpdate() {
-        return true;
-    }
-
-    @Override
-    public ActionResultType onSneakRightClick(PlayerEntity player, Direction side) {
+    public InteractionResult onSneakRightClick(Player player) {
         if (!isRemote()) {
             setActive(!getActive());
-            World world = getWorld();
+            Level world = getLevel();
             if (world != null) {
-                world.playSound(null, getPos().getX(), getPos().getY(), getPos().getZ(), SoundEvents.UI_BUTTON_CLICK, SoundCategory.BLOCKS, 0.3F, 1);
+                world.playSound(null, getBlockPos().getX(), getBlockPos().getY(), getBlockPos().getZ(), SoundEvents.UI_BUTTON_CLICK, SoundSource.BLOCKS, 0.3F, 1);
             }
         }
-        return ActionResultType.SUCCESS;
+        return InteractionResult.SUCCESS;
     }
 
     @Override
-    public ActionResultType onRightClick(PlayerEntity player, Direction side) {
-        return ActionResultType.PASS;
+    public InteractionResult onRightClick(Player player) {
+        return InteractionResult.PASS;
     }
 
     @Nonnull
     @Override
-    public CompoundNBT getReducedUpdateTag() {
-        CompoundNBT updateTag = super.getReducedUpdateTag();
+    public CompoundTag getReducedUpdateTag() {
+        CompoundTag updateTag = super.getReducedUpdateTag();
         updateTag.put(NBTConstants.GAS_STORED, gasTank.serializeNBT());
         updateTag.putInt(NBTConstants.PROGRESS, processTicks);
         return updateTag;
     }
 
     @Override
-    public void handleUpdateTag(BlockState state, @Nonnull CompoundNBT tag) {
-        super.handleUpdateTag(state, tag);
+    public void handleUpdateTag(@Nonnull CompoundTag tag) {
+        super.handleUpdateTag(tag);
         NBTUtils.setCompoundIfPresent(tag, NBTConstants.GAS_STORED, nbt -> gasTank.deserializeNBT(nbt));
         NBTUtils.setIntIfPresent(tag, NBTConstants.PROGRESS, val -> processTicks = val);
     }
@@ -134,5 +127,10 @@ public class TileEntityRadioactiveWasteBarrel extends TileEntityMekanism impleme
     @Override
     public int getRedstoneLevel() {
         return MekanismUtils.redstoneLevelFromContents(gasTank.getStored(), gasTank.getCapacity());
+    }
+
+    @Override
+    protected boolean makesComparatorDirty(@Nullable SubstanceType type) {
+        return type == SubstanceType.GAS;
     }
 }

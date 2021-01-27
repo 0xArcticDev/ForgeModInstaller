@@ -9,22 +9,18 @@ import mekanism.api.text.TextComponentUtil;
 import mekanism.common.MekanismLang;
 import mekanism.common.util.InventoryUtils;
 import mekanism.common.util.ItemDataUtils;
-import net.minecraft.client.util.ITooltipFlag;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.entity.player.ServerPlayerEntity;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.CompoundNBT;
-import net.minecraft.nbt.ListNBT;
-import net.minecraft.util.ActionResult;
-import net.minecraft.util.ActionResultType;
-import net.minecraft.util.Hand;
-import net.minecraft.util.NonNullList;
-import net.minecraft.util.text.ITextComponent;
-import net.minecraft.world.World;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.api.distmarker.OnlyIn;
-import net.minecraftforge.common.util.Constants.NBT;
+import net.minecraft.core.NonNullList;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResultHolder;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.TooltipFlag;
+import net.minecraft.world.level.Level;
 
 public class ItemCraftingFormula extends Item {
 
@@ -33,8 +29,7 @@ public class ItemCraftingFormula extends Item {
     }
 
     @Override
-    @OnlyIn(Dist.CLIENT)
-    public void addInformation(@Nonnull ItemStack itemStack, World world, @Nonnull List<ITextComponent> tooltip, @Nonnull ITooltipFlag flag) {
+    public void appendHoverText(@Nonnull ItemStack itemStack, Level world, @Nonnull List<Component> tooltip, @Nonnull TooltipFlag flag) {
         NonNullList<ItemStack> inv = getInventory(itemStack);
         if (inv != null) {
             List<ItemStack> stacks = new ArrayList<>();
@@ -61,34 +56,33 @@ public class ItemCraftingFormula extends Item {
 
     @Nonnull
     @Override
-    public ActionResult<ItemStack> onItemRightClick(@Nonnull World world, PlayerEntity player, @Nonnull Hand hand) {
-        ItemStack stack = player.getHeldItem(hand);
-        if (player.isSneaking()) {
-            if (!world.isRemote) {
+    public InteractionResultHolder<ItemStack> use(@Nonnull Level world, Player player, @Nonnull InteractionHand hand) {
+        ItemStack stack = player.getItemInHand(hand);
+        if (player.isShiftKeyDown()) {
+            if (!world.isClientSide) {
                 setInventory(stack, null);
                 setInvalid(stack, false);
-                ((ServerPlayerEntity) player).sendContainerToPlayer(player.openContainer);
             }
-            return new ActionResult<>(ActionResultType.SUCCESS, stack);
+            return InteractionResultHolder.sidedSuccess(stack, world.isClientSide);
         }
-        return new ActionResult<>(ActionResultType.PASS, stack);
+        return InteractionResultHolder.pass(stack);
     }
 
     @Override
     public int getItemStackLimit(ItemStack stack) {
-        return getInventory(stack) != null ? 1 : 64;
+        return getInventory(stack) == null ? 64 : 1;
     }
 
     @Nonnull
     @Override
-    public ITextComponent getDisplayName(@Nonnull ItemStack stack) {
+    public Component getName(@Nonnull ItemStack stack) {
         if (getInventory(stack) == null) {
-            return super.getDisplayName(stack);
+            return super.getName(stack);
         }
         if (isInvalid(stack)) {
-            return TextComponentUtil.build(super.getDisplayName(stack), " ", EnumColor.DARK_RED, MekanismLang.INVALID);
+            return TextComponentUtil.build(super.getName(stack), " ", EnumColor.DARK_RED, MekanismLang.INVALID);
         }
-        return TextComponentUtil.build(super.getDisplayName(stack), " ", EnumColor.DARK_GREEN, MekanismLang.ENCODED);
+        return TextComponentUtil.build(super.getName(stack), " ", EnumColor.DARK_GREEN, MekanismLang.ENCODED);
     }
 
     public boolean isInvalid(ItemStack stack) {
@@ -100,16 +94,16 @@ public class ItemCraftingFormula extends Item {
     }
 
     public NonNullList<ItemStack> getInventory(ItemStack stack) {
-        if (!ItemDataUtils.hasData(stack, NBTConstants.ITEMS, NBT.TAG_LIST)) {
+        if (!ItemDataUtils.hasData(stack, NBTConstants.ITEMS, Tag.TAG_LIST)) {
             return null;
         }
-        ListNBT tagList = ItemDataUtils.getList(stack, NBTConstants.ITEMS);
+        ListTag tagList = ItemDataUtils.getList(stack, NBTConstants.ITEMS);
         NonNullList<ItemStack> inventory = NonNullList.withSize(9, ItemStack.EMPTY);
         for (int tagCount = 0; tagCount < tagList.size(); tagCount++) {
-            CompoundNBT tagCompound = tagList.getCompound(tagCount);
+            CompoundTag tagCompound = tagList.getCompound(tagCount);
             byte slotID = tagCompound.getByte(NBTConstants.SLOT);
             if (slotID >= 0 && slotID < 9) {
-                inventory.set(slotID, ItemStack.read(tagCompound));
+                inventory.set(slotID, ItemStack.of(tagCompound));
             }
         }
         return inventory;
@@ -120,15 +114,16 @@ public class ItemCraftingFormula extends Item {
             ItemDataUtils.removeData(stack, NBTConstants.ITEMS);
             return;
         }
-        ListNBT tagList = new ListNBT();
+        ListTag tagList = new ListTag();
         for (int slotCount = 0; slotCount < 9; slotCount++) {
-            if (!inv.get(slotCount).isEmpty()) {
-                CompoundNBT tagCompound = new CompoundNBT();
+            ItemStack slotStack = inv.get(slotCount);
+            if (!slotStack.isEmpty()) {
+                CompoundTag tagCompound = new CompoundTag();
                 tagCompound.putByte(NBTConstants.SLOT, (byte) slotCount);
-                inv.get(slotCount).write(tagCompound);
+                slotStack.save(tagCompound);
                 tagList.add(tagCompound);
             }
         }
-        ItemDataUtils.setList(stack, NBTConstants.ITEMS, tagList);
+        ItemDataUtils.setListOrRemove(stack, NBTConstants.ITEMS, tagList);
     }
 }

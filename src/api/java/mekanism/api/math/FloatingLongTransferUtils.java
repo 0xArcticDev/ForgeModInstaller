@@ -5,8 +5,8 @@ import it.unimi.dsi.fastutil.ints.IntArrayList;
 import it.unimi.dsi.fastutil.ints.IntList;
 import java.util.function.IntSupplier;
 import javax.annotation.ParametersAreNonnullByDefault;
-import mcp.MethodsReturnNonnullByDefault;
 import mekanism.api.Action;
+import net.minecraft.MethodsReturnNonnullByDefault;
 
 @ParametersAreNonnullByDefault
 @MethodsReturnNonnullByDefault
@@ -77,7 +77,7 @@ public class FloatingLongTransferUtils {
                     //If we are done extracting break and return the amount extracted
                     break;
                 }
-                //Otherwise keep looking and attempt to extract more from the handler
+                //Otherwise, keep looking and attempt to extract more from the handler
             }
         }
         return extracted;

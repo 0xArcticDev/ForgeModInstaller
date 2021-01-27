@@ -6,20 +6,22 @@ import mekanism.common.content.miner.MinerItemStackFilter;
 import mekanism.common.content.miner.MinerMaterialFilter;
 import mekanism.common.content.miner.MinerModIDFilter;
 import mekanism.common.content.miner.MinerTagFilter;
+import mekanism.common.content.oredictionificator.OredictionificatorItemFilter;
 import mekanism.common.content.qio.filter.QIOItemStackFilter;
+import mekanism.common.content.qio.filter.QIOModIDFilter;
 import mekanism.common.content.qio.filter.QIOTagFilter;
 import mekanism.common.content.transporter.SorterItemStackFilter;
 import mekanism.common.content.transporter.SorterMaterialFilter;
 import mekanism.common.content.transporter.SorterModIDFilter;
 import mekanism.common.content.transporter.SorterTagFilter;
-import mekanism.common.tile.machine.TileEntityOredictionificator.OredictionificatorFilter;
-import net.minecraft.nbt.CompoundNBT;
-import net.minecraft.network.PacketBuffer;
-import net.minecraftforge.common.util.Constants.NBT;
+import mekanism.common.util.NBTUtils;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.network.FriendlyByteBuf;
 
 public abstract class BaseFilter<FILTER extends BaseFilter<FILTER>> implements IFilter<FILTER> {
 
-    //Mark it as abstract so it does not think clone is being implemented by Object
+    //Mark it as abstract, so it does not think clone is being implemented by Object
     @Override
     public abstract FILTER clone();
 
@@ -30,19 +32,19 @@ public abstract class BaseFilter<FILTER extends BaseFilter<FILTER>> implements I
     public abstract boolean equals(Object o);
 
     @Override
-    public CompoundNBT write(CompoundNBT nbtTags) {
-        nbtTags.putInt(NBTConstants.TYPE, getFilterType().ordinal());
+    public CompoundTag write(CompoundTag nbtTags) {
+        NBTUtils.writeEnum(nbtTags, NBTConstants.TYPE, getFilterType());
         return nbtTags;
     }
 
     @Override
-    public void write(PacketBuffer buffer) {
-        buffer.writeEnumValue(getFilterType());
+    public void write(FriendlyByteBuf buffer) {
+        buffer.writeEnum(getFilterType());
     }
 
     @Nullable
-    public static IFilter<?> readFromNBT(CompoundNBT nbt) {
-        if (nbt.contains(NBTConstants.TYPE, NBT.TAG_INT)) {
+    public static IFilter<?> readFromNBT(CompoundTag nbt) {
+        if (nbt.contains(NBTConstants.TYPE, Tag.TAG_INT)) {
             IFilter<?> filter = fromType(FilterType.byIndexStatic(nbt.getInt(NBTConstants.TYPE)));
             if (filter != null) {
                 filter.read(nbt);
@@ -53,40 +55,28 @@ public abstract class BaseFilter<FILTER extends BaseFilter<FILTER>> implements I
     }
 
     @Nullable
-    public static IFilter<?> readFromPacket(PacketBuffer dataStream) {
-        IFilter<?> filter = fromType(dataStream.readEnumValue(FilterType.class));
+    public static IFilter<?> readFromPacket(FriendlyByteBuf dataStream) {
+        IFilter<?> filter = fromType(dataStream.readEnum(FilterType.class));
         if (filter != null) {
             filter.read(dataStream);
         }
         return filter;
     }
 
-    private static IFilter<?> fromType(FilterType filterType) {
-        switch (filterType) {
-            case MINER_ITEMSTACK_FILTER:
-                return new MinerItemStackFilter();
-            case MINER_MATERIAL_FILTER:
-                return new MinerMaterialFilter();
-            case MINER_MODID_FILTER:
-                return new MinerModIDFilter();
-            case MINER_TAG_FILTER:
-                return new MinerTagFilter();
-            case SORTER_ITEMSTACK_FILTER:
-                return new SorterItemStackFilter();
-            case SORTER_MATERIAL_FILTER:
-                return new SorterMaterialFilter();
-            case SORTER_MODID_FILTER:
-                return new SorterModIDFilter();
-            case SORTER_TAG_FILTER:
-                return new SorterTagFilter();
-            case OREDICTIONIFICATOR:
-                return new OredictionificatorFilter();
-            case QIO_ITEMSTACK_FILTER:
-                return new QIOItemStackFilter();
-            case QIO_TAG_FILTER:
-                return new QIOTagFilter();
-            default:
-                return null;
-        }
+    public static IFilter<?> fromType(FilterType filterType) {
+        return switch (filterType) {
+            case MINER_ITEMSTACK_FILTER -> new MinerItemStackFilter();
+            case MINER_MATERIAL_FILTER -> new MinerMaterialFilter();
+            case MINER_MODID_FILTER -> new MinerModIDFilter();
+            case MINER_TAG_FILTER -> new MinerTagFilter();
+            case SORTER_ITEMSTACK_FILTER -> new SorterItemStackFilter();
+            case SORTER_MATERIAL_FILTER -> new SorterMaterialFilter();
+            case SORTER_MODID_FILTER -> new SorterModIDFilter();
+            case SORTER_TAG_FILTER -> new SorterTagFilter();
+            case OREDICTIONIFICATOR_ITEM_FILTER -> new OredictionificatorItemFilter();
+            case QIO_ITEMSTACK_FILTER -> new QIOItemStackFilter();
+            case QIO_MODID_FILTER -> new QIOModIDFilter();
+            case QIO_TAG_FILTER -> new QIOTagFilter();
+        };
     }
 }

@@ -1,32 +1,20 @@
 package mekanism.generators.common.item.generator;
 
+import java.util.function.Consumer;
 import javax.annotation.Nonnull;
 import mekanism.common.block.prefab.BlockTile;
 import mekanism.common.item.block.machine.ItemBlockMachine;
-import mekanism.common.util.WorldUtils;
-import mekanism.generators.client.render.item.GeneratorsISTERProvider;
-import net.minecraft.block.BlockState;
-import net.minecraft.item.BlockItemUseContext;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.World;
+import mekanism.generators.client.render.GeneratorsRenderPropertiesProvider;
+import net.minecraftforge.client.IItemRenderProperties;
 
 public class ItemBlockWindGenerator extends ItemBlockMachine {
 
     public ItemBlockWindGenerator(BlockTile<?, ?> block) {
-        super(block, GeneratorsISTERProvider::wind);
+        super(block);
     }
 
     @Override
-    public boolean placeBlock(@Nonnull BlockItemUseContext context, @Nonnull BlockState state) {
-        World world = context.getWorld();
-        BlockPos pos = context.getPos();
-        for (int yPos = 1; yPos < 5; yPos++) {
-            BlockPos toCheck = pos.up(yPos);
-            if (!WorldUtils.isValidReplaceableBlock(world, toCheck)) {
-                //If there is not enough room, fail
-                return false;
-            }
-        }
-        return super.placeBlock(context, state);
+    public void initializeClient(@Nonnull Consumer<IItemRenderProperties> consumer) {
+        consumer.accept(GeneratorsRenderPropertiesProvider.wind());
     }
 }

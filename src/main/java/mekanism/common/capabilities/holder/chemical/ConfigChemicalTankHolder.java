@@ -1,6 +1,5 @@
 package mekanism.common.capabilities.holder.chemical;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Supplier;
@@ -29,19 +28,17 @@ import mekanism.common.tile.component.config.slot.ChemicalSlotInfo.InfusionSlotI
 import mekanism.common.tile.component.config.slot.ChemicalSlotInfo.PigmentSlotInfo;
 import mekanism.common.tile.component.config.slot.ChemicalSlotInfo.SlurrySlotInfo;
 import mekanism.common.tile.component.config.slot.ISlotInfo;
-import net.minecraft.util.Direction;
+import net.minecraft.core.Direction;
 
 public abstract class ConfigChemicalTankHolder<CHEMICAL extends Chemical<CHEMICAL>, STACK extends ChemicalStack<CHEMICAL>, TANK extends IChemicalTank<CHEMICAL, STACK>>
-      extends ConfigHolder implements IChemicalTankHolder<CHEMICAL, STACK, TANK> {
-
-    protected final List<TANK> tanks = new ArrayList<>();
+      extends ConfigHolder<TANK> implements IChemicalTankHolder<CHEMICAL, STACK, TANK> {
 
     protected ConfigChemicalTankHolder(Supplier<Direction> facingSupplier, Supplier<TileComponentConfig> configSupplier) {
         super(facingSupplier, configSupplier);
     }
 
     void addTank(@Nonnull TANK tank) {
-        tanks.add(tank);
+        slots.add(tank);
     }
 
     @Nonnull
@@ -50,12 +47,7 @@ public abstract class ConfigChemicalTankHolder<CHEMICAL extends Chemical<CHEMICA
     @Nonnull
     @Override
     public List<TANK> getTanks(@Nullable Direction direction) {
-        return getSlots(direction, tanks, slotInfo -> {
-            if (slotInfo != null && slotInfo.isEnabled()) {
-                return getTanksFromSlot(slotInfo);
-            }
-            return Collections.emptyList();
-        });
+        return getSlots(direction, this::getTanksFromSlot);
     }
 
     public static class ConfigGasTankHolder extends ConfigChemicalTankHolder<Gas, GasStack, IGasTank> {
@@ -72,7 +64,7 @@ public abstract class ConfigChemicalTankHolder<CHEMICAL extends Chemical<CHEMICA
         @Nonnull
         @Override
         protected List<IGasTank> getTanksFromSlot(ISlotInfo slotInfo) {
-            return slotInfo instanceof GasSlotInfo ? ((GasSlotInfo) slotInfo).getTanks() : Collections.emptyList();
+            return slotInfo instanceof GasSlotInfo info ? info.getTanks() : Collections.emptyList();
         }
     }
 
@@ -90,7 +82,7 @@ public abstract class ConfigChemicalTankHolder<CHEMICAL extends Chemical<CHEMICA
         @Nonnull
         @Override
         protected List<IInfusionTank> getTanksFromSlot(ISlotInfo slotInfo) {
-            return slotInfo instanceof InfusionSlotInfo ? ((InfusionSlotInfo) slotInfo).getTanks() : Collections.emptyList();
+            return slotInfo instanceof InfusionSlotInfo info ? info.getTanks() : Collections.emptyList();
         }
     }
 
@@ -108,7 +100,7 @@ public abstract class ConfigChemicalTankHolder<CHEMICAL extends Chemical<CHEMICA
         @Nonnull
         @Override
         protected List<IPigmentTank> getTanksFromSlot(ISlotInfo slotInfo) {
-            return slotInfo instanceof PigmentSlotInfo ? ((PigmentSlotInfo) slotInfo).getTanks() : Collections.emptyList();
+            return slotInfo instanceof PigmentSlotInfo info ? info.getTanks() : Collections.emptyList();
         }
     }
 
@@ -126,7 +118,7 @@ public abstract class ConfigChemicalTankHolder<CHEMICAL extends Chemical<CHEMICA
         @Nonnull
         @Override
         protected List<ISlurryTank> getTanksFromSlot(ISlotInfo slotInfo) {
-            return slotInfo instanceof SlurrySlotInfo ? ((SlurrySlotInfo) slotInfo).getTanks() : Collections.emptyList();
+            return slotInfo instanceof SlurrySlotInfo info ? info.getTanks() : Collections.emptyList();
         }
     }
 }

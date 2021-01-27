@@ -3,6 +3,7 @@ package mekanism.common.lib.inventory;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import javax.annotation.Nonnull;
 import mekanism.common.Mekanism;
@@ -11,9 +12,9 @@ import mekanism.common.tile.TileEntityLogisticalSorter;
 import mekanism.common.util.CapabilityUtils;
 import mekanism.common.util.InventoryUtils;
 import mekanism.common.util.StackUtils;
-import net.minecraft.item.ItemStack;
-import net.minecraft.tileentity.TileEntity;
-import net.minecraft.util.Direction;
+import net.minecraft.core.Direction;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraftforge.items.CapabilityItemHandler;
 import net.minecraftforge.items.IItemHandler;
 
@@ -25,15 +26,15 @@ public abstract class TransitRequest {
         return new SimpleTransitRequest(stack);
     }
 
-    public static TransitRequest anyItem(TileEntity tile, Direction side, int amount) {
+    public static TransitRequest anyItem(BlockEntity tile, Direction side, int amount) {
         return definedItem(tile, side, amount, Finder.ANY);
     }
 
-    public static TransitRequest definedItem(TileEntity tile, Direction side, int amount, Finder finder) {
+    public static TransitRequest definedItem(BlockEntity tile, Direction side, int amount, Finder finder) {
         return definedItem(tile, side, 1, amount, finder);
     }
 
-    public static TransitRequest definedItem(TileEntity tile, Direction side, int min, int max, Finder finder) {
+    public static TransitRequest definedItem(BlockEntity tile, Direction side, int min, int max, Finder finder) {
         TileTransitRequest ret = new TileTransitRequest(tile, side);
         IItemHandler inventory = InventoryUtils.assertItemHandler("TransitRequest", tile, side);
         if (inventory == null) {
@@ -44,10 +45,10 @@ public abstract class TransitRequest {
             ItemStack stack = inventory.extractItem(i, max, true);
 
             if (!stack.isEmpty() && finder.modifies(stack)) {
-                HashedItem hashed = HashedItem.create(stack);
+                HashedItem hashed = HashedItem.raw(stack);
                 int toUse = Math.min(stack.getCount(), max - ret.getCount(hashed));
                 if (toUse == 0) {
-                    continue; // continue if we don't need anymore of this item type
+                    continue; // continue if we don't need any more of this item type
                 }
                 ret.addItem(StackUtils.size(stack, toUse), i);
             }
@@ -60,9 +61,9 @@ public abstract class TransitRequest {
     public abstract Collection<? extends ItemData> getItemData();
 
     @Nonnull
-    public TransitResponse addToInventory(TileEntity tile, Direction side, boolean force) {
-        if (force && tile instanceof TileEntityLogisticalSorter) {
-            return ((TileEntityLogisticalSorter) tile).sendHome(this);
+    public TransitResponse addToInventory(BlockEntity tile, Direction side, int min, boolean force) {
+        if (force && tile instanceof TileEntityLogisticalSorter sorter) {
+            return sorter.sendHome(this);
         }
         if (isEmpty()) {
             return getEmptyResponse();
@@ -70,6 +71,19 @@ public abstract class TransitRequest {
         Optional<IItemHandler> capability = CapabilityUtils.getCapability(tile, CapabilityItemHandler.ITEM_HANDLER_CAPABILITY, side.getOpposite()).resolve();
         if (capability.isPresent()) {
             IItemHandler inventory = capability.get();
+            if (min > 1) {
+                //If we have a minimum amount of items we are trying to send, we need to start by simulating
+                // to see if we actually have enough room to send the minimum amount of our item. We can
+                // skip this step if we don't have a minimum amount being sent, as then whatever we are
+                // able to insert will be "good enough"
+                TransitResponse response = TransporterManager.getPredictedInsert(inventory, this);
+                if (response.isEmpty() || response.getSendingAmount() < min) {
+                    //If we aren't able to send any items or are only able to send less than we have room for
+                    // return that we aren't able to insert the requested amount
+                    return getEmptyResponse();
+                }
+                // otherwise, continue on to actually sending items to the inventory
+            }
             for (ItemData data : getItemData()) {
                 ItemStack origInsert = StackUtils.size(data.getStack(), data.getTotalCount());
                 ItemStack toInsert = origInsert.copy();
@@ -151,6 +165,29 @@ public abstract class TransitRequest {
         public ItemStack useAll() {
             return use(getSendingAmount());
         }
+
+        @Override
+        public boolean equals(Object o) {
+            if (o == this) {
+                return true;
+            } else if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
+            TransitResponse other = (TransitResponse) o;
+            return (inserted == other.inserted || ItemStack.matches(inserted, other.inserted)) && slotData.equals(other.slotData);
+        }
+
+        @Override
+        public int hashCode() {
+            int code = 1;
+            code = 31 * code + inserted.getItem().hashCode();
+            code = 31 * code + inserted.getCount();
+            if (inserted.hasTag()) {
+                code = 31 * code + inserted.getTag().hashCode();
+            }
+            code = 31 * code + slotData.hashCode();
+            return code;
+        }
     }
 
     public static class ItemData {
@@ -177,6 +214,22 @@ public abstract class TransitRequest {
         public ItemStack use(int amount) {
             Mekanism.logger.error("Can't 'use' with this type of TransitResponse: {}", getClass().getName());
             return ItemStack.EMPTY;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (o == this) {
+                return true;
+            } else if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
+            ItemData itemData = (ItemData) o;
+            return totalCount == itemData.totalCount && itemType.equals(itemData.itemType);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(itemType, totalCount);
         }
     }
 

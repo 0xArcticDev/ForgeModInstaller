@@ -12,17 +12,17 @@ import mekanism.common.tile.interfaces.ITierUpgradable;
 import mekanism.common.tile.interfaces.ITileDirectional;
 import mekanism.common.upgrade.IUpgradeData;
 import mekanism.common.util.WorldUtils;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.ItemUseContext;
-import net.minecraft.tileentity.TileEntity;
-import net.minecraft.util.ActionResultType;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.text.ITextComponent;
-import net.minecraft.world.World;
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.context.UseOnContext;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
 
 public class ItemTierInstaller extends Item {
 
@@ -49,19 +49,19 @@ public class ItemTierInstaller extends Item {
 
     @Nonnull
     @Override
-    public ITextComponent getDisplayName(@Nonnull ItemStack stack) {
-        return TextComponentUtil.build(toTier.getTextColor(), super.getDisplayName(stack));
+    public Component getName(@Nonnull ItemStack stack) {
+        return TextComponentUtil.build(toTier.getTextColor(), super.getName(stack));
     }
 
     @Nonnull
     @Override
-    public ActionResultType onItemUse(ItemUseContext context) {
-        PlayerEntity player = context.getPlayer();
-        World world = context.getWorld();
-        if (world.isRemote || player == null) {
-            return ActionResultType.PASS;
+    public InteractionResult useOn(UseOnContext context) {
+        Player player = context.getPlayer();
+        Level world = context.getLevel();
+        if (world.isClientSide || player == null) {
+            return InteractionResult.PASS;
         }
-        BlockPos pos = context.getPos();
+        BlockPos pos = context.getClickedPos();
         BlockState state = world.getBlockState(pos);
         Block block = state.getBlock();
         if (Attribute.has(block, AttributeUpgradeable.class)) {
@@ -70,42 +70,42 @@ public class ItemTierInstaller extends Item {
             if (baseTier == fromTier && baseTier != toTier) {
                 BlockState upgradeState = upgradeableBlock.upgradeResult(state, toTier);
                 if (state == upgradeState) {
-                    return ActionResultType.PASS;
+                    return InteractionResult.PASS;
                 }
-                TileEntity tile = WorldUtils.getTileEntity(world, pos);
-                if (tile instanceof ITierUpgradable) {
-                    if (tile instanceof TileEntityMekanism && !((TileEntityMekanism) tile).playersUsing.isEmpty()) {
-                        return ActionResultType.FAIL;
+                BlockEntity tile = WorldUtils.getTileEntity(world, pos);
+                if (tile instanceof ITierUpgradable tierUpgradable) {
+                    if (tile instanceof TileEntityMekanism tileMek && !tileMek.playersUsing.isEmpty()) {
+                        return InteractionResult.FAIL;
                     }
-                    IUpgradeData upgradeData = ((ITierUpgradable) tile).getUpgradeData();
+                    IUpgradeData upgradeData = tierUpgradable.getUpgradeData();
                     if (upgradeData == null) {
-                        if (((ITierUpgradable) tile).canBeUpgraded()) {
+                        if (tierUpgradable.canBeUpgraded()) {
                             Mekanism.logger.warn("Got no upgrade data for block {} at position: {} in {} but it said it would be able to provide some.", block, pos, world);
-                            return ActionResultType.FAIL;
+                            return InteractionResult.FAIL;
                         }
                     } else {
-                        world.setBlockState(pos, upgradeState);
+                        world.setBlockAndUpdate(pos, upgradeState);
                         //TODO: Make it so it doesn't have to be a TileEntityMekanism?
                         TileEntityMekanism upgradedTile = WorldUtils.getTileEntity(TileEntityMekanism.class, world, pos);
                         if (upgradedTile == null) {
                             Mekanism.logger.warn("Error upgrading block at position: {} in {}.", pos, world);
-                            return ActionResultType.FAIL;
+                            return InteractionResult.FAIL;
                         } else {
-                            if (tile instanceof ITileDirectional && ((ITileDirectional) tile).isDirectional()) {
-                                upgradedTile.setFacing(((ITileDirectional) tile).getDirection());
+                            if (tile instanceof ITileDirectional directional && directional.isDirectional()) {
+                                upgradedTile.setFacing(directional.getDirection());
                             }
                             upgradedTile.parseUpgradeData(upgradeData);
                             upgradedTile.sendUpdatePacket();
-                            upgradedTile.markDirty();
+                            upgradedTile.setChanged();
                             if (!player.isCreative()) {
-                                player.getHeldItem(context.getHand()).shrink(1);
+                                context.getItemInHand().shrink(1);
                             }
-                            return ActionResultType.SUCCESS;
+                            return InteractionResult.sidedSuccess(world.isClientSide);
                         }
                     }
                 }
             }
         }
-        return ActionResultType.PASS;
+        return InteractionResult.PASS;
     }
 }

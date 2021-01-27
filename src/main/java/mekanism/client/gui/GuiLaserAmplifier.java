@@ -1,78 +1,85 @@
 package mekanism.client.gui;
 
-import com.mojang.blaze3d.matrix.MatrixStack;
+import com.mojang.blaze3d.vertex.PoseStack;
+import java.math.BigDecimal;
 import javax.annotation.Nonnull;
 import mekanism.api.math.FloatingLong;
 import mekanism.client.gui.element.gauge.GaugeType;
 import mekanism.client.gui.element.gauge.GuiEnergyGauge;
 import mekanism.client.gui.element.tab.GuiAmplifierTab;
-import mekanism.client.gui.element.tab.GuiRedstoneControlTab;
-import mekanism.client.gui.element.tab.GuiSecurityTab;
 import mekanism.client.gui.element.text.GuiTextField;
-import mekanism.client.gui.element.text.InputValidator;
 import mekanism.common.Mekanism;
 import mekanism.common.MekanismLang;
 import mekanism.common.inventory.container.tile.MekanismTileContainer;
-import mekanism.common.network.PacketGuiInteract;
-import mekanism.common.network.PacketGuiInteract.GuiInteraction;
-import mekanism.common.network.PacketGuiSetEnergy;
-import mekanism.common.network.PacketGuiSetEnergy.GuiEnergyValue;
+import mekanism.common.network.to_server.PacketGuiInteract;
+import mekanism.common.network.to_server.PacketGuiInteract.GuiInteraction;
+import mekanism.common.network.to_server.PacketGuiSetEnergy;
+import mekanism.common.network.to_server.PacketGuiSetEnergy.GuiEnergyValue;
 import mekanism.common.tile.laser.TileEntityLaserAmplifier;
 import mekanism.common.util.MekanismUtils;
 import mekanism.common.util.text.EnergyDisplay;
-import net.minecraft.entity.player.PlayerInventory;
-import net.minecraft.util.text.ITextComponent;
+import mekanism.common.util.text.InputValidator;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.player.Inventory;
 
 public class GuiLaserAmplifier extends GuiMekanismTile<TileEntityLaserAmplifier, MekanismTileContainer<TileEntityLaserAmplifier>> {
 
     private GuiTextField minField, maxField, timerField;
 
-    public GuiLaserAmplifier(MekanismTileContainer<TileEntityLaserAmplifier> container, PlayerInventory inv, ITextComponent title) {
+    public GuiLaserAmplifier(MekanismTileContainer<TileEntityLaserAmplifier> container, Inventory inv, Component title) {
         super(container, inv, title);
         dynamicSlots = true;
     }
 
     @Override
-    public void init() {
-        super.init();
-        addButton(new GuiEnergyGauge(tile.getEnergyContainer(), GaugeType.STANDARD, this, 6, 10));
-        addButton(new GuiSecurityTab(this, tile));
-        addButton(new GuiRedstoneControlTab(this, tile));
-        addButton(new GuiAmplifierTab(this, tile));
-        addButton(timerField = new GuiTextField(this, 96, 28, 36, 11));
-        timerField.setMaxStringLength(4);
+    protected void addGuiElements() {
+        super.addGuiElements();
+        addRenderableWidget(new GuiEnergyGauge(tile.getEnergyContainer(), GaugeType.STANDARD, this, 6, 10));
+        addRenderableWidget(new GuiAmplifierTab(this, tile));
+        timerField = addRenderableWidget(new GuiTextField(this, 96, 28, 36, 11));
+        timerField.setMaxLength(4);
         timerField.setEnterHandler(this::setTime);
         timerField.setInputValidator(InputValidator.DIGIT);
-        addButton(minField = new GuiTextField(this, 96, 43, 72, 11));
-        minField.setMaxStringLength(10);
+        minField = addRenderableWidget(new GuiTextField(this, 96, 43, 72, 11));
+        minField.setMaxLength(10);
         minField.setEnterHandler(this::setMinThreshold);
         minField.setInputValidator(InputValidator.SCI_NOTATION);
-        addButton(maxField = new GuiTextField(this, 96, 58, 72, 11));
-        maxField.setMaxStringLength(10);
+        maxField = addRenderableWidget(new GuiTextField(this, 96, 58, 72, 11));
+        maxField.setMaxLength(10);
         maxField.setEnterHandler(this::setMaxThreshold);
         maxField.setInputValidator(InputValidator.SCI_NOTATION);
     }
 
     @Override
-    protected void drawForegroundText(@Nonnull MatrixStack matrix, int mouseX, int mouseY) {
+    protected void drawForegroundText(@Nonnull PoseStack matrix, int mouseX, int mouseY) {
         renderTitleText(matrix);
-        drawString(matrix, playerInventory.getDisplayName(), playerInventoryTitleX, playerInventoryTitleY, titleTextColor());
-        if (tile.time > 0) {
-            drawString(matrix, MekanismLang.DELAY.translate(tile.time), 26, 30, titleTextColor());
+        drawString(matrix, playerInventoryTitle, inventoryLabelX, inventoryLabelY, titleTextColor());
+        if (tile.getDelay() > 0) {
+            drawTextScaledBound(matrix, MekanismLang.DELAY.translate(tile.getDelay()), 26, 30, titleTextColor(), 68);
         } else {
-            drawString(matrix, MekanismLang.NO_DELAY.translate(), 26, 30, titleTextColor());
+            drawTextScaledBound(matrix, MekanismLang.NO_DELAY.translate(), 26, 30, titleTextColor(), 68);
         }
-        drawString(matrix, MekanismLang.MIN.translate(EnergyDisplay.of(tile.minThreshold)), 26, 45, titleTextColor());
-        drawString(matrix, MekanismLang.MAX.translate(EnergyDisplay.of(tile.maxThreshold)), 26, 60, titleTextColor());
+        drawTextScaledBound(matrix, MekanismLang.MIN.translate(EnergyDisplay.of(tile.getMinThreshold())), 26, 45, titleTextColor(), 68);
+        drawTextScaledBound(matrix, MekanismLang.MAX.translate(EnergyDisplay.of(tile.getMaxThreshold())), 26, 60, titleTextColor(), 68);
         super.drawForegroundText(matrix, mouseX, mouseY);
+    }
+
+    private FloatingLong parseFloatingLong(GuiTextField textField) {
+        String text = textField.getText();
+        if (text.contains("E")) {
+            //TODO: Improve how we handle scientific notation, we currently create a big decimal and then
+            // we parse it as a floating long, ideally we could skip the big decimal side of things
+            text = new BigDecimal(text).toPlainString();
+        }
+        return FloatingLong.parseFloatingLong(text);
     }
 
     private void setMinThreshold() {
         if (!minField.getText().isEmpty()) {
             try {
-                Mekanism.packetHandler.sendToServer(new PacketGuiSetEnergy(GuiEnergyValue.MIN_THRESHOLD, tile.getPos(),
-                      MekanismUtils.convertToJoules(FloatingLong.parseFloatingLong(minField.getText()))));
-            } catch (Exception ignored) {
+                Mekanism.packetHandler().sendToServer(new PacketGuiSetEnergy(GuiEnergyValue.MIN_THRESHOLD, tile.getBlockPos(),
+                      MekanismUtils.convertToJoules(parseFloatingLong(minField))));
+            } catch (NumberFormatException ignored) {
             }
             minField.setText("");
         }
@@ -81,8 +88,8 @@ public class GuiLaserAmplifier extends GuiMekanismTile<TileEntityLaserAmplifier,
     private void setMaxThreshold() {
         if (!maxField.getText().isEmpty()) {
             try {
-                Mekanism.packetHandler.sendToServer(new PacketGuiSetEnergy(GuiEnergyValue.MAX_THRESHOLD, tile.getPos(),
-                      MekanismUtils.convertToJoules(FloatingLong.parseFloatingLong(maxField.getText()))));
+                Mekanism.packetHandler().sendToServer(new PacketGuiSetEnergy(GuiEnergyValue.MAX_THRESHOLD, tile.getBlockPos(),
+                      MekanismUtils.convertToJoules(parseFloatingLong(maxField))));
             } catch (NumberFormatException ignored) {
             }
             maxField.setText("");
@@ -91,7 +98,10 @@ public class GuiLaserAmplifier extends GuiMekanismTile<TileEntityLaserAmplifier,
 
     private void setTime() {
         if (!timerField.getText().isEmpty()) {
-            Mekanism.packetHandler.sendToServer(new PacketGuiInteract(GuiInteraction.SET_TIME, tile, Integer.parseInt(timerField.getText())));
+            try {
+                Mekanism.packetHandler().sendToServer(new PacketGuiInteract(GuiInteraction.SET_TIME, tile, Integer.parseInt(timerField.getText())));
+            } catch (NumberFormatException ignored) {
+            }
             timerField.setText("");
         }
     }

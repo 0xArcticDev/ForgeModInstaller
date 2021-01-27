@@ -2,24 +2,22 @@
   "type": "mekanism:enriching",
   "conditions": [
     {
-      "modid": "biomesoplenty",
-      "type": "forge:mod_loaded"
+      "type": "forge:mod_loaded",
+      "modid": "biomesoplenty"
     }
   ],
-  "input": [
-    {
-      "ingredient": {
+  "input": {
+    "ingredient": [
+      {
         "item": "biomesoplenty:violet"
-      }
-    },
-    {
-      "ingredient": {
+      },
+      {
         "item": "biomesoplenty:lavender"
       }
-    }
-  ],
+    ]
+  },
   "output": {
-    "item": "minecraft:purple_dye",
-    "count": 2
+    "count": 2,
+    "item": "minecraft:purple_dye"
   }
 }

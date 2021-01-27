@@ -1,6 +1,6 @@
 package mekanism.client.gui.element.custom;
 
-import com.mojang.blaze3d.matrix.MatrixStack;
+import com.mojang.blaze3d.vertex.PoseStack;
 import java.util.function.Consumer;
 import javax.annotation.Nonnull;
 import mekanism.client.SpecialColors;
@@ -13,7 +13,7 @@ import mekanism.common.config.MekanismConfig;
 import mekanism.common.inventory.container.QIOItemViewerContainer;
 import mekanism.common.util.MekanismUtils;
 import mekanism.common.util.MekanismUtils.ResourceType;
-import net.minecraft.util.ResourceLocation;
+import net.minecraft.resources.ResourceLocation;
 
 public class GuiResizeControls extends GuiSideHolder {
 
@@ -26,10 +26,12 @@ public class GuiResizeControls extends GuiSideHolder {
     private static final ResourceLocation PLUS = MekanismUtils.getResource(ResourceType.GUI_BUTTON, "plus.png");
 
     public GuiResizeControls(IGuiWrapper gui, int y, Consumer<ResizeType> resizeHandler) {
-        super(gui, -26, y, 39, true);
+        super(gui, -26, y, 39, true, false);
         this.resizeHandler = resizeHandler;
-        addChild(expandButton = new MekanismImageButton(gui, this.x + 4, this.y + 5, 19, 9, 19, 9, PLUS, () -> handleResize(ResizeType.EXPAND_Y)));
-        addChild(shrinkButton = new MekanismImageButton(gui, this.x + 4, this.y + 25, 19, 9, 19, 9, MINUS, () -> handleResize(ResizeType.SHRINK_Y)));
+        expandButton = addChild(new MekanismImageButton(gui, relativeX + 4, relativeY + 5, 19, 9, 19, 9, PLUS,
+              () -> handleResize(ResizeType.EXPAND_Y)));
+        shrinkButton = addChild(new MekanismImageButton(gui, relativeX + 4, relativeY + 25, 19, 9, 19, 9, MINUS,
+              () -> handleResize(ResizeType.SHRINK_Y)));
         updateButtonState();
         active = true;
     }
@@ -41,24 +43,24 @@ public class GuiResizeControls extends GuiSideHolder {
     }
 
     @Override
-    public void renderToolTip(@Nonnull MatrixStack matrix, int mouseX, int mouseY) {
+    public void renderToolTip(@Nonnull PoseStack matrix, int mouseX, int mouseY) {
         super.renderToolTip(matrix, mouseX, mouseY);
         if (tooltipTicks > 0 && !expandButton.active) {
-            displayTooltip(matrix, MekanismLang.QIO_COMPENSATE_TOOLTIP.translate(), mouseX, mouseY);
+            displayTooltips(matrix, mouseX, mouseY, MekanismLang.QIO_COMPENSATE_TOOLTIP.translate());
         }
     }
 
     @Override
-    public void renderForeground(MatrixStack matrix, int mouseX, int mouseY) {
+    public void renderForeground(PoseStack matrix, int mouseX, int mouseY) {
         super.renderForeground(matrix, mouseX, mouseY);
-        drawScaledCenteredText(matrix, MekanismLang.HEIGHT.translate(), relativeX + 13.5F, relativeY + 15.5F, titleTextColor(), 0.7F);
+        drawScaledCenteredTextScaledBound(matrix, MekanismLang.HEIGHT.translate(), relativeX + 13.5F, relativeY + 15.5F, titleTextColor(), width - 4, 0.7F);
     }
 
     @Override
     public void onClick(double mouseX, double mouseY) {
         super.onClick(mouseX, mouseY);
         if (!expandButton.active && mouseX >= expandButton.x && mouseX < expandButton.x + expandButton.getWidth() &&
-            mouseY >= expandButton.y && mouseY < expandButton.y + expandButton.getHeightRealms()) {
+            mouseY >= expandButton.y && mouseY < expandButton.y + expandButton.getHeight()) {
             tooltipTicks = 100;
         }
     }

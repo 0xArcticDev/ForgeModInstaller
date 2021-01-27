@@ -2,10 +2,10 @@ package mekanism.common.inventory.container.sync;
 
 import it.unimi.dsi.fastutil.floats.FloatConsumer;
 import mekanism.api.functions.FloatSupplier;
-import mekanism.common.network.container.property.FloatPropertyData;
+import mekanism.common.network.to_client.container.property.FloatPropertyData;
 
 /**
- * Version of {@link net.minecraft.util.IntReferenceHolder} for handling floats
+ * Version of {@link net.minecraft.world.inventory.DataSlot} for handling floats
  */
 public abstract class SyncableFloat implements ISyncableData {
 

@@ -1,73 +1,57 @@
 package mekanism.tools.common.material.impl;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import mekanism.common.tags.MekanismTags;
+import mekanism.tools.common.ToolsTags;
 import mekanism.tools.common.material.BaseMekanismMaterial;
-import net.minecraft.inventory.EquipmentSlotType;
-import net.minecraft.item.crafting.Ingredient;
-import net.minecraft.util.SoundEvent;
-import net.minecraft.util.SoundEvents;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.tags.TagKey;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.world.level.block.Block;
 
 public class RefinedObsidianMaterialDefaults extends BaseMekanismMaterial {
 
     @Override
     public int getShieldDurability() {
-        return 2_240;
+        return 1_680;
     }
 
     @Override
     public float getAxeDamage() {
-        return 2;
+        return 7;
     }
 
     @Override
     public float getAxeAtkSpeed() {
-        return -2;
+        return -2.9F;
     }
 
     @Override
-    public float getPaxelDamage() {
+    public int getUses() {
+        return 4_096;
+    }
+
+    @Override
+    public float getSpeed() {
+        return 12;
+    }
+
+    @Override
+    public float getAttackDamageBonus() {
+        return 8;
+    }
+
+    @Override
+    public int getLevel() {
         return 4;
     }
 
     @Override
-    public int getPaxelHarvestLevel() {
-        return 3;
-    }
-
-    @Override
-    public int getPaxelMaxUses() {
-        return 3_000;
-    }
-
-    @Override
-    public float getPaxelEfficiency() {
-        return 25;
-    }
-
-    @Override
-    public int getMaxUses() {
-        return 2_500;
-    }
-
-    @Override
-    public float getEfficiency() {
-        return 20;
-    }
-
-    @Override
-    public float getAttackDamage() {
-        return 10;
-    }
-
-    @Override
-    public int getHarvestLevel() {
-        return 3;
-    }
-
-    @Override
     public int getCommonEnchantability() {
-        return 40;
+        return 18;
     }
 
     @Override
@@ -77,37 +61,35 @@ public class RefinedObsidianMaterialDefaults extends BaseMekanismMaterial {
 
     @Override
     public float getToughness() {
-        return 4;
+        return 5;
     }
 
     @Override
-    public int getDurability(@Nonnull EquipmentSlotType slotType) {
-        switch (slotType) {
-            case FEET:
-                return 650;
-            case LEGS:
-                return 750;
-            case CHEST:
-                return 800;
-            case HEAD:
-                return 550;
-        }
-        return 0;
+    public int getDurabilityForSlot(@Nonnull EquipmentSlot slotType) {
+        return switch (slotType) {
+            case FEET -> 975;
+            case LEGS -> 1_125;
+            case CHEST -> 1_200;
+            case HEAD -> 825;
+            default -> 0;
+        };
     }
 
     @Override
-    public int getDamageReductionAmount(@Nonnull EquipmentSlotType slotType) {
-        switch (slotType) {
-            case FEET:
-                return 5;
-            case LEGS:
-                return 8;
-            case CHEST:
-                return 12;
-            case HEAD:
-                return 5;
-        }
-        return 0;
+    public int getDefenseForSlot(@Nonnull EquipmentSlot slotType) {
+        return switch (slotType) {
+            case FEET -> 5;
+            case LEGS -> 8;
+            case CHEST -> 12;
+            case HEAD -> 6;
+            default -> 0;
+        };
+    }
+
+    @Nonnull
+    @Override
+    public String getConfigCommentName() {
+        return "Refined Obsidian";
     }
 
     @Nonnull
@@ -116,25 +98,26 @@ public class RefinedObsidianMaterialDefaults extends BaseMekanismMaterial {
         return "refined_obsidian";
     }
 
+    @Nullable
     @Override
-    public int getPaxelEnchantability() {
-        return 50;
+    public TagKey<Block> getTag() {
+        return ToolsTags.Blocks.NEEDS_REFINED_OBSIDIAN_TOOL;
     }
 
     @Nonnull
     @Override
-    public SoundEvent getSoundEvent() {
-        return SoundEvents.ITEM_ARMOR_EQUIP_IRON;
+    public SoundEvent getEquipSound() {
+        return SoundEvents.ARMOR_EQUIP_IRON;
     }
 
     @Nonnull
     @Override
     public Ingredient getCommonRepairMaterial() {
-        return Ingredient.fromTag(MekanismTags.Items.INGOTS_REFINED_OBSIDIAN);
+        return Ingredient.of(MekanismTags.Items.INGOTS_REFINED_OBSIDIAN);
     }
 
     @Override
     public float getKnockbackResistance() {
-        return 0.1F;
+        return 0.2F;
     }
 }

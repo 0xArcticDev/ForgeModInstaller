@@ -1,15 +1,19 @@
 package mekanism.common.content.qio.filter;
 
 import javax.annotation.Nonnull;
+import mekanism.api.NBTConstants;
 import mekanism.common.content.filter.FilterType;
 import mekanism.common.content.filter.IItemStackFilter;
-import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.CompoundNBT;
-import net.minecraft.network.PacketBuffer;
+import mekanism.common.lib.inventory.Finder;
+import mekanism.common.util.NBTUtils;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.world.item.ItemStack;
 
 public class QIOItemStackFilter extends QIOFilter<QIOItemStackFilter> implements IItemStackFilter<QIOItemStackFilter> {
 
     private ItemStack itemType = ItemStack.EMPTY;
+    public boolean fuzzyMode;
 
     public QIOItemStackFilter(ItemStack item) {
         itemType = item;
@@ -19,44 +23,55 @@ public class QIOItemStackFilter extends QIOFilter<QIOItemStackFilter> implements
     }
 
     @Override
-    public CompoundNBT write(CompoundNBT nbtTags) {
+    public Finder getFinder() {
+        return fuzzyMode ? Finder.item(itemType) : Finder.strict(itemType);
+    }
+
+    @Override
+    public CompoundTag write(CompoundTag nbtTags) {
         super.write(nbtTags);
-        itemType.write(nbtTags);
+        nbtTags.putBoolean(NBTConstants.FUZZY_MODE, fuzzyMode);
+        itemType.save(nbtTags);
         return nbtTags;
     }
 
     @Override
-    public void read(CompoundNBT nbtTags) {
-        itemType = ItemStack.read(nbtTags);
+    public void read(CompoundTag nbtTags) {
+        NBTUtils.setBooleanIfPresent(nbtTags, NBTConstants.FUZZY_MODE, fuzzy -> fuzzyMode = fuzzy);
+        itemType = ItemStack.of(nbtTags);
     }
 
     @Override
-    public void write(PacketBuffer buffer) {
+    public void write(FriendlyByteBuf buffer) {
         super.write(buffer);
-        buffer.writeItemStack(itemType);
+        buffer.writeBoolean(fuzzyMode);
+        buffer.writeItem(itemType);
     }
 
     @Override
-    public void read(PacketBuffer dataStream) {
-        itemType = dataStream.readItemStack();
+    public void read(FriendlyByteBuf dataStream) {
+        fuzzyMode = dataStream.readBoolean();
+        itemType = dataStream.readItem();
     }
 
     @Override
     public int hashCode() {
         int code = 1;
         code = 31 * code + itemType.hashCode();
+        code = 31 * code + (fuzzyMode ? 1 : 0);
         return code;
     }
 
     @Override
-    public boolean equals(Object filter) {
-        return filter instanceof QIOItemStackFilter && ((QIOItemStackFilter) filter).itemType.isItemEqual(itemType);
+    public boolean equals(Object o) {
+        return o instanceof QIOItemStackFilter filter && filter.itemType.sameItem(itemType) && filter.fuzzyMode == fuzzyMode;
     }
 
     @Override
     public QIOItemStackFilter clone() {
         QIOItemStackFilter filter = new QIOItemStackFilter();
         filter.itemType = itemType.copy();
+        filter.fuzzyMode = fuzzyMode;
         return filter;
     }
 

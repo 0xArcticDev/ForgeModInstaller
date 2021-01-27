@@ -3,15 +3,15 @@ package mekanism.api.datagen.recipe.builder;
 import com.google.gson.JsonObject;
 import javax.annotation.Nonnull;
 import javax.annotation.ParametersAreNonnullByDefault;
-import mcp.MethodsReturnNonnullByDefault;
 import mekanism.api.JsonConstants;
 import mekanism.api.SerializerHelper;
 import mekanism.api.annotations.FieldsAreNonnullByDefault;
 import mekanism.api.chemical.slurry.SlurryStack;
 import mekanism.api.datagen.recipe.MekanismRecipeBuilder;
-import mekanism.api.recipes.inputs.FluidStackIngredient;
-import mekanism.api.recipes.inputs.chemical.SlurryStackIngredient;
-import net.minecraft.util.ResourceLocation;
+import mekanism.api.recipes.ingredients.ChemicalStackIngredient.SlurryStackIngredient;
+import mekanism.api.recipes.ingredients.FluidStackIngredient;
+import net.minecraft.MethodsReturnNonnullByDefault;
+import net.minecraft.resources.ResourceLocation;
 
 @FieldsAreNonnullByDefault
 @ParametersAreNonnullByDefault
@@ -29,6 +29,13 @@ public class FluidSlurryToSlurryRecipeBuilder extends MekanismRecipeBuilder<Flui
         this.output = output;
     }
 
+    /**
+     * Creates a Washing recipe builder.
+     *
+     * @param fluidInput  Fluid Input.
+     * @param slurryInput Slurry Input.
+     * @param output      Output.
+     */
     public static FluidSlurryToSlurryRecipeBuilder washing(FluidStackIngredient fluidInput, SlurryStackIngredient slurryInput, SlurryStack output) {
         if (output.isEmpty()) {
             throw new IllegalArgumentException("This washing recipe requires a non empty slurry output.");
@@ -48,7 +55,7 @@ public class FluidSlurryToSlurryRecipeBuilder extends MekanismRecipeBuilder<Flui
         }
 
         @Override
-        public void serialize(@Nonnull JsonObject json) {
+        public void serializeRecipeData(@Nonnull JsonObject json) {
             json.add(JsonConstants.FLUID_INPUT, fluidInput.serialize());
             json.add(JsonConstants.SLURRY_INPUT, slurryInput.serialize());
             json.add(JsonConstants.OUTPUT, SerializerHelper.serializeSlurryStack(output));

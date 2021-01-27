@@ -1,6 +1,5 @@
 package mekanism.common.capabilities.holder.heat;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Supplier;
@@ -11,11 +10,9 @@ import mekanism.common.capabilities.holder.ConfigHolder;
 import mekanism.common.lib.transmitter.TransmissionType;
 import mekanism.common.tile.component.TileComponentConfig;
 import mekanism.common.tile.component.config.slot.HeatSlotInfo;
-import net.minecraft.util.Direction;
+import net.minecraft.core.Direction;
 
-public class ConfigHeatCapacitorHolder extends ConfigHolder implements IHeatCapacitorHolder {
-
-    protected final List<IHeatCapacitor> capacitors = new ArrayList<>();
+public class ConfigHeatCapacitorHolder extends ConfigHolder<IHeatCapacitor> implements IHeatCapacitorHolder {
 
     protected ConfigHeatCapacitorHolder(Supplier<Direction> facingSupplier, Supplier<TileComponentConfig> configSupplier) {
         super(facingSupplier, configSupplier);
@@ -29,15 +26,10 @@ public class ConfigHeatCapacitorHolder extends ConfigHolder implements IHeatCapa
     @Nonnull
     @Override
     public List<IHeatCapacitor> getHeatCapacitors(@Nullable Direction direction) {
-        return getSlots(direction, capacitors, slotInfo -> {
-            if (slotInfo instanceof HeatSlotInfo && slotInfo.isEnabled()) {
-                return ((HeatSlotInfo) slotInfo).getHeatCapacitors();
-            }
-            return Collections.emptyList();
-        });
+        return getSlots(direction, slotInfo -> slotInfo instanceof HeatSlotInfo info ? info.getHeatCapacitors() : Collections.emptyList());
     }
 
     void addCapacitor(@Nonnull IHeatCapacitor capacitor) {
-        capacitors.add(capacitor);
+        slots.add(capacitor);
     }
 }

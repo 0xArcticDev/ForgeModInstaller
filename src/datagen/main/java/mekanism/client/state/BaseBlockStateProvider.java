@@ -2,14 +2,23 @@ package mekanism.client.state;
 
 import java.util.List;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 import javax.annotation.Nonnull;
 import mekanism.api.providers.IBlockProvider;
 import mekanism.client.model.BaseBlockModelProvider;
 import mekanism.common.DataGenJsonConstants;
+import mekanism.common.registration.impl.FluidDeferredRegister.MekanismFluidType;
 import mekanism.common.registration.impl.FluidRegistryObject;
-import net.minecraft.block.Block;
+import mekanism.common.util.RegistryUtils;
+import net.minecraft.core.Direction;
 import net.minecraft.data.DataGenerator;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraftforge.client.model.generators.BlockStateProvider;
+import net.minecraftforge.client.model.generators.ConfiguredModel;
+import net.minecraftforge.client.model.generators.ModelFile;
 import net.minecraftforge.client.model.generators.VariantBlockStateBuilder;
 import net.minecraftforge.common.data.ExistingFileHelper;
 
@@ -40,14 +49,28 @@ public abstract class BaseBlockStateProvider<PROVIDER extends BaseBlockModelProv
         return getVariantBuilder(blockProvider.getBlock());
     }
 
-    protected String name(Block block) {
-        return block.getRegistryName().getPath();
+    protected void registerFluidBlockStates(List<FluidRegistryObject<? extends MekanismFluidType, ?, ?, ?, ?>> fluidROs) {
+        for (FluidRegistryObject<? extends MekanismFluidType, ?, ?, ?, ?> fluidRO : fluidROs) {
+            simpleBlock(fluidRO.getBlock(), models().getBuilder(RegistryUtils.getPath(fluidRO.getBlock())).texture(DataGenJsonConstants.PARTICLE,
+                  fluidRO.getFluidType().getStillTexture()));
+        }
     }
 
-    protected void registerFluidBlockStates(List<FluidRegistryObject<?, ?, ?, ?>> fluidROs) {
-        for (FluidRegistryObject<?, ?, ?, ?> fluidRO : fluidROs) {
-            simpleBlock(fluidRO.getBlock(), models().getBuilder(name(fluidRO.getBlock())).texture(DataGenJsonConstants.PARTICLE,
-                  fluidRO.getStillFluid().getAttributes().getStillTexture()));
-        }
+    /**
+     * Like directionalBlock but allows us to skip specific properties
+     */
+    protected void directionalBlock(Block block, Function<BlockState, ModelFile> modelFunc, int angleOffset, Property<?>... toSkip) {
+        getVariantBuilder(block).forAllStatesExcept(state -> {
+            Direction dir = state.getValue(BlockStateProperties.FACING);
+            return ConfiguredModel.builder()
+                  .modelFile(modelFunc.apply(state))
+                  .rotationX(dir == Direction.DOWN ? 180 : dir.getAxis().isHorizontal() ? 90 : 0)
+                  .rotationY(dir.getAxis().isVertical() ? 0 : (((int) dir.toYRot()) + angleOffset) % 360)
+                  .build();
+        }, toSkip);
+    }
+
+    protected void simpleBlockItem(IBlockProvider block, ModelFile model) {
+        super.simpleBlockItem(block.getBlock(), model);
     }
 }

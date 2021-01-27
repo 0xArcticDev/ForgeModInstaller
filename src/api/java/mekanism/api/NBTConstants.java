@@ -1,5 +1,8 @@
 package mekanism.api;
 
+/**
+ * Class for storing constants that are used in various NBT related storage, to reduce the chances of typos
+ */
 public final class NBTConstants {
 
     private NBTConstants() {
@@ -8,8 +11,9 @@ public final class NBTConstants {
     //Ones that also are used for interacting with forge/vanilla
     public static final String BASE = "Base";
     public static final String BLOCK_ENTITY_TAG = "BlockEntityTag";
-    public static final String CHUNK_DATA_LEVEL = "Level";
-    public static final String ENTITY_TAG = "EntityTag";
+    public static final String COUNT = "Count";
+    public static final String CUSTOM_NAME = "CustomName";
+    public static final String ENCHANTMENTS = "Enchantments";
     public static final String ID = "id";
     public static final String X = "x";
     public static final String Y = "y";
@@ -24,7 +28,6 @@ public final class NBTConstants {
     public static final String CURRENT_CONNECTIONS = "connections";
     public static final String HAS_STRUCTURE = "hasStructure";
     public static final String HEIGHT = "height";
-    public static final String HOT = "hot";
     public static final String INVENTORY_ID = "inventoryID";
     public static final String LOWER_VOLUME = "lowerVolume";
     public static final String MUFFLING_COUNT = "muffling";
@@ -39,6 +42,7 @@ public final class NBTConstants {
     public static final String SCALE_ALT_2 = "scale2";
     public static final String SCALE_ALT_3 = "scale3";
     public static final String SOUND_SCALE = "soundScale";
+    public static final String TAG = "tag";
     public static final String VALVE = "valve";
     public static final String VOLUME = "volume";
 
@@ -47,6 +51,7 @@ public final class NBTConstants {
     public static final String ACTIVE_NODES = "activeNodes";
     public static final String ACTIVE_STATE = "activeState";
     public static final String ALLOW_DEFAULT = "allowDefault";
+    public static final String AGE = "age";
     public static final String AMOUNT = "amount";
     public static final String AUTO = "auto";
     public static final String BLADES = "blades";
@@ -56,6 +61,7 @@ public final class NBTConstants {
     public static final String BURNING = "burning";
     public static final String BURN_TIME = "burnTime";
     public static final String CACHE = "cache";
+    public static final String CHANCE = "chance";
     public static final String CHANNEL = "channel";
     public static final String CHEMICAL_TYPE = "chemicalType";
     public static final String CHUNK_SET = "chunkSet";
@@ -63,17 +69,22 @@ public final class NBTConstants {
     public static final String COLOR = "color";
     public static final String COMPONENT_CONFIG = "componentConfig";
     public static final String COMPONENT_EJECTOR = "componentEjector";
+    public static final String COMPONENT_FREQUENCY = "componentFrequency";
     public static final String COMPONENT_SECURITY = "componentSecurity";
     public static final String COMPONENT_UPGRADE = "componentUpgrade";
     public static final String CONFIG = "config";
     public static final String CONNECTION = "connection";
     public static final String CONTAINER = "Container";
     public static final String CONTROL_TYPE = "controlType";
+    public static final String COULD_OPERATE = "couldOperate";
     public static final String CURRENT_REDSTONE = "currentRedstone";
     public static final String DATA = "data";
+    public static final String DATA_NAME = "dataName";
     public static final String DATA_TYPE = "dataType";
     public static final String DELAY = "delay";
     public static final String DIMENSION = "dimension";
+    public static final String DISABLED = "disabled";
+    public static final String DRAINING = "draining";
     public static final String DRIVES = "drives";
     public static final String DUMP_LEFT = "dumpLeft";
     public static final String DUMP_MODE = "dumping";
@@ -83,6 +94,7 @@ public final class NBTConstants {
     public static final String ENERGY_CONTAINERS = "EnergyContainers";
     public static final String ENERGY_STORED = "energy";
     public static final String ENERGY_USAGE = "energyUsage";
+    public static final String FILLING = "filling";
     public static final String FILTER = "filter";
     public static final String FILTERS = "filters";
     public static final String FINISHED = "finished";
@@ -112,6 +124,7 @@ public final class NBTConstants {
     public static final String INJECTION_RATE = "injectionRate";
     public static final String INVALID = "invalid";
     public static final String INVERSE = "inverse";
+    public static final String INVERSE_REQUIRES_REPLACE = "inverseReplace";
     public static final String ITEM = "Item";
     public static final String ITEMS = "Items";
     public static final String LAST_FIRED = "lastFired";
@@ -119,10 +132,12 @@ public final class NBTConstants {
     public static final String LATCHED = "latched";
     public static final String LEVEL = "level";
     public static final String LOGIC_TYPE = "logicType";
+    public static final String MAGNITUDE = "magnitude";
     public static final String MAIN = "main";
     public static final String MAX = "max";
     public static final String MAX_BURN_TIME = "maxBurnTime";
     public static final String MEK_DATA = "mekData";
+    public static final String MELTDOWNS = "meltdowns";
     public static final String MIN = "min";
     public static final String MODE = "mode";
     public static final String MODID = "modID";
@@ -146,6 +161,7 @@ public final class NBTConstants {
     public static final String PUBLIC_FREQUENCY = "publicFreq";
     public static final String PULL = "pull";
     public static final String PULSE = "pulse";
+    public static final String SKIN = "skin";
     public static final String QIO_ITEM_MAP = "qioItemMap";
     public static final String QIO_META_COUNT = "qioMetaCount";
     public static final String QIO_META_TYPES = "qioMetaTypes";
@@ -159,6 +175,7 @@ public final class NBTConstants {
     public static final String REPLACE_STACK = "replaceStack";
     public static final String REQUIRE_STACK = "requireStack";
     public static final String ROUND_ROBIN = "roundRobin";
+    public static final String ROUND_ROBIN_TARGET = "rrTarget";
     public static final String RUNNING = "running";
     public static final String SECURITY_MODE = "securityMode";
     public static final String SELECTED = "selected";
@@ -172,11 +189,11 @@ public final class NBTConstants {
     public static final String SLURRY_STORED = "slurry";
     public static final String SLURRY_TANKS = "SlurryTanks";
     public static final String SORTING = "sorting";
+    public static final String STABILIZER_CHUNKS_TO_LOAD = "stabilizerChunksToLoad";
     public static final String STATE = "state";
     public static final String STOCK_CONTROL = "stockControl";
     public static final String STORED = "stored";
     public static final String STRICT_INPUT = "strictInput";
-    public static final String SUCKED_LAST_OPERATION = "suckedLastOperation";
     public static final String TAG_NAME = "tagName";
     public static final String TANK = "Tank";
     public static final String TEMPERATURE = "temperature";
@@ -187,5 +204,6 @@ public final class NBTConstants {
     public static final String UPDATE_DELAY = "updateDelay";
     public static final String UPGRADES = "upgrades";
     public static final String USED_NODES = "usedNodes";
-    public static final String WORLD_GEN_VERSION = "worldGenVersion";
+    public static final String USED_SO_FAR = "usedSoFar";
+    public static final String WORLD_GEN_VERSION = "mekWorldGenVersion";
 }

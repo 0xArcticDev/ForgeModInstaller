@@ -3,19 +3,17 @@ package mekanism.common.item.block.transmitter;
 import java.util.List;
 import javax.annotation.Nonnull;
 import mekanism.api.text.EnumColor;
-import mekanism.client.MekKeyHandler;
-import mekanism.client.MekanismKeyHandler;
+import mekanism.client.key.MekKeyHandler;
+import mekanism.client.key.MekanismKeyHandler;
 import mekanism.common.MekanismLang;
 import mekanism.common.block.attribute.Attribute;
 import mekanism.common.block.transmitter.BlockThermodynamicConductor;
 import mekanism.common.item.block.ItemBlockMultipartAble;
 import mekanism.common.tier.ConductorTier;
-import net.minecraft.client.util.ITooltipFlag;
-import net.minecraft.item.ItemStack;
-import net.minecraft.util.text.ITextComponent;
-import net.minecraft.world.World;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.api.distmarker.OnlyIn;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.TooltipFlag;
+import net.minecraft.world.level.Level;
 
 public class ItemBlockThermodynamicConductor extends ItemBlockMultipartAble<BlockThermodynamicConductor> {
 
@@ -30,9 +28,8 @@ public class ItemBlockThermodynamicConductor extends ItemBlockMultipartAble<Bloc
     }
 
     @Override
-    @OnlyIn(Dist.CLIENT)
-    public void addInformation(@Nonnull ItemStack stack, World world, @Nonnull List<ITextComponent> tooltip, @Nonnull ITooltipFlag flag) {
-        if (MekKeyHandler.getIsKeyPressed(MekanismKeyHandler.detailsKey)) {
+    public void appendHoverText(@Nonnull ItemStack stack, Level world, @Nonnull List<Component> tooltip, @Nonnull TooltipFlag flag) {
+        if (MekKeyHandler.isKeyPressed(MekanismKeyHandler.detailsKey)) {
             tooltip.add(MekanismLang.CAPABLE_OF_TRANSFERRING.translateColored(EnumColor.DARK_GRAY));
             tooltip.add(MekanismLang.HEAT.translateColored(EnumColor.PURPLE, MekanismLang.MEKANISM));
         } else {
@@ -40,7 +37,7 @@ public class ItemBlockThermodynamicConductor extends ItemBlockMultipartAble<Bloc
             tooltip.add(MekanismLang.CONDUCTION.translateColored(EnumColor.INDIGO, EnumColor.GRAY, tier.getInverseConduction()));
             tooltip.add(MekanismLang.INSULATION.translateColored(EnumColor.INDIGO, EnumColor.GRAY, tier.getBaseConductionInsulation()));
             tooltip.add(MekanismLang.HEAT_CAPACITY.translateColored(EnumColor.INDIGO, EnumColor.GRAY, tier.getHeatCapacity()));
-            tooltip.add(MekanismLang.HOLD_FOR_DETAILS.translateColored(EnumColor.GRAY, EnumColor.INDIGO, MekanismKeyHandler.detailsKey.func_238171_j_()));
+            tooltip.add(MekanismLang.HOLD_FOR_DETAILS.translateColored(EnumColor.GRAY, EnumColor.INDIGO, MekanismKeyHandler.detailsKey.getTranslatedKeyMessage()));
         }
     }
 }

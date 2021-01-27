@@ -1,12 +1,12 @@
 package mekanism.client.gui.item;
 
-import com.mojang.blaze3d.matrix.MatrixStack;
+import com.mojang.blaze3d.vertex.PoseStack;
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 import java.util.ArrayList;
 import java.util.List;
 import javax.annotation.Nonnull;
-import mekanism.api.text.APILang;
+import mekanism.api.text.TextComponentUtil;
 import mekanism.client.gui.GuiMekanism;
 import mekanism.client.gui.element.GuiArrowSelection;
 import mekanism.client.gui.element.GuiInnerScreen;
@@ -18,55 +18,57 @@ import mekanism.common.MekanismLang;
 import mekanism.common.inventory.container.item.SeismicReaderContainer;
 import mekanism.common.util.MekanismUtils;
 import mekanism.common.util.MekanismUtils.ResourceType;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.entity.player.PlayerInventory;
-import net.minecraft.item.ItemStack;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.text.ITextComponent;
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
 
 public class GuiSeismicReader extends GuiMekanism<SeismicReaderContainer> {
 
     private final List<BlockState> blockList = new ArrayList<>();
     private final Object2IntMap<Block> frequencies = new Object2IntOpenHashMap<>();
+    private final int minHeight;
     private MekanismButton upButton;
     private MekanismButton downButton;
     private GuiScrollBar scrollBar;
 
-    public GuiSeismicReader(SeismicReaderContainer container, PlayerInventory inv, ITextComponent title) {
+    public GuiSeismicReader(SeismicReaderContainer container, Inventory inv, Component title) {
         super(container, inv, title);
-        xSize = 147;
-        ySize = 182;
-        BlockPos pos = inv.player.getPosition();
+        imageWidth = 147;
+        imageHeight = 182;
+        this.minHeight = inv.player.level.getMinBuildHeight();
+        BlockPos pos = inv.player.blockPosition();
         //Calculate all the blocks in the column
-        for (BlockPos p : BlockPos.getAllInBoxMutable(new BlockPos(pos.getX(), 0, pos.getZ()), pos)) {
-            blockList.add(inv.player.world.getBlockState(p));
+        for (BlockPos p : BlockPos.betweenClosed(new BlockPos(pos.getX(), minHeight, pos.getZ()), pos)) {
+            blockList.add(inv.player.level.getBlockState(p));
         }
     }
 
     @Override
-    public void init() {
-        super.init();
-        addButton(new GuiInnerScreen(this, 7, 11, 63, 49));
-        addButton(new GuiInnerScreen(this, 74, 11, 51, 159));
-        addButton(scrollBar = new GuiScrollBar(this, 126, 25, 131, blockList::size, () -> 1));
-        addButton(new GuiArrowSelection(this, 76, 81, () -> {
+    protected void addGuiElements() {
+        super.addGuiElements();
+        addRenderableWidget(new GuiInnerScreen(this, 7, 11, 63, 49));
+        addRenderableWidget(new GuiInnerScreen(this, 74, 11, 51, 159));
+        scrollBar = addRenderableWidget(new GuiScrollBar(this, 126, 25, 131, blockList::size, () -> 1));
+        addRenderableWidget(new GuiArrowSelection(this, 76, 81, () -> {
             int currentLayer = scrollBar.getCurrentSelection();
             if (currentLayer >= 0) {
-                return blockList.get(blockList.size() - 1 - currentLayer).getBlock().getTranslatedName();
+                return blockList.get(blockList.size() - 1 - currentLayer).getBlock().getName();
             }
             return null;
         }));
-        addButton(upButton = new MekanismImageButton(this, guiLeft + 126, guiTop + 11, 14,
+        upButton = addRenderableWidget(new MekanismImageButton(this, 126, 11, 14,
               MekanismUtils.getResource(ResourceType.GUI_BUTTON, "up.png"), () -> scrollBar.adjustScroll(1)));
-        addButton(downButton = new MekanismImageButton(this, guiLeft + 126, guiTop + 156, 14,
+        downButton = addRenderableWidget(new MekanismImageButton(this, 126, 156, 14,
               MekanismUtils.getResource(ResourceType.GUI_BUTTON, "down.png"), () -> scrollBar.adjustScroll(-1)));
         updateEnabledButtons();
     }
 
     @Override
-    public void tick() {
-        super.tick();
+    public void containerTick() {
+        super.containerTick();
         updateEnabledButtons();
     }
 
@@ -77,10 +79,10 @@ public class GuiSeismicReader extends GuiMekanism<SeismicReaderContainer> {
     }
 
     @Override
-    protected void drawForegroundText(@Nonnull MatrixStack matrix, int mouseX, int mouseY) {
+    protected void drawForegroundText(@Nonnull PoseStack matrix, int mouseX, int mouseY) {
         int currentLayer = blockList.size() - scrollBar.getCurrentSelection() - 1;
         //Render the layer text scaled, so that it does not start overlapping past 100
-        drawTextScaledBound(matrix, APILang.GENERIC.translate(currentLayer), 111, 87, screenTextColor(), 13);
+        drawTextScaledBound(matrix, TextComponentUtil.build(minHeight + currentLayer), 111, 87, screenTextColor(), 13);
 
         //TODO - V11: Eventually instead of just rendering the item stacks, it would be nice to be able to render the actual vertical column of blocks
         //Render the item stacks
@@ -94,7 +96,7 @@ public class GuiSeismicReader extends GuiMekanism<SeismicReaderContainer> {
                 if (i == 4) {
                     renderItem(matrix, stack, renderX, renderY);
                 } else {
-                    matrix.push();
+                    matrix.pushPose();
                     matrix.translate(renderX, renderY, 0);
                     if (i < 4) {
                         matrix.translate(1.7F, 2.5F, 0);
@@ -103,7 +105,7 @@ public class GuiSeismicReader extends GuiMekanism<SeismicReaderContainer> {
                     }
                     matrix.scale(0.8F, 0.8F, 0.8F);
                     renderItem(matrix, stack, 0, 0);
-                    matrix.pop();
+                    matrix.popPose();
                 }
             }
         }
@@ -111,9 +113,9 @@ public class GuiSeismicReader extends GuiMekanism<SeismicReaderContainer> {
         // Get the name from the stack and render it
         if (currentLayer >= 0) {
             Block block = blockList.get(currentLayer).getBlock();
-            ITextComponent displayName = block.getTranslatedName();
+            Component displayName = block.getName();
             drawTextScaledBound(matrix, displayName, 10, 16, screenTextColor(), 57);
-            frequency = frequencies.computeIntIfAbsent(block, b -> (int) blockList.stream().filter(blockState -> b == blockState.getBlock()).count());
+            frequency = frequencies.computeIfAbsent(block, b -> (int) blockList.stream().filter(blockState -> b == blockState.getBlock()).count());
         }
         drawTextScaledBound(matrix, MekanismLang.ABUNDANCY.translate(frequency), 10, 26, screenTextColor(), 57);
         MekanismRenderer.resetColor();
@@ -121,13 +123,7 @@ public class GuiSeismicReader extends GuiMekanism<SeismicReaderContainer> {
     }
 
     @Override
-    public void onClose() {
-        super.onClose();
-        blockList.clear();
-    }
-
-    @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
-        return scrollBar.adjustScroll(delta) || super.mouseScrolled(mouseX, mouseY, delta);
+        return super.mouseScrolled(mouseX, mouseY, delta) || scrollBar.adjustScroll(delta);
     }
 }

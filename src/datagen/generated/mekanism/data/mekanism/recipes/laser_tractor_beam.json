@@ -1,18 +1,18 @@
 {
-  "type": "minecraft:crafting_shaped",
-  "result": {
-    "item": "mekanism:laser_tractor_beam"
+  "type": "mekanism:mek_data",
+  "key": {
+    "#": {
+      "item": "mekanism:laser_amplifier"
+    },
+    "P": {
+      "tag": "mekanism:personal_storage"
+    }
   },
   "pattern": [
     "P",
     "#"
   ],
-  "key": {
-    "P": {
-      "tag": "forge:chests/personal"
-    },
-    "#": {
-      "item": "mekanism:laser_amplifier"
-    }
+  "result": {
+    "item": "mekanism:laser_tractor_beam"
   }
 }

@@ -8,9 +8,9 @@ import mekanism.api.energy.IEnergyContainer;
 import mekanism.common.capabilities.holder.QuantumEntangloporterConfigHolder;
 import mekanism.common.lib.transmitter.TransmissionType;
 import mekanism.common.tile.TileEntityQuantumEntangloporter;
-import net.minecraft.util.Direction;
+import net.minecraft.core.Direction;
 
-public class QuantumEntangloporterEnergyContainerHolder extends QuantumEntangloporterConfigHolder implements IEnergyContainerHolder {
+public class QuantumEntangloporterEnergyContainerHolder extends QuantumEntangloporterConfigHolder<IEnergyContainer> implements IEnergyContainerHolder {
 
     public QuantumEntangloporterEnergyContainerHolder(TileEntityQuantumEntangloporter entangloporter) {
         super(entangloporter);

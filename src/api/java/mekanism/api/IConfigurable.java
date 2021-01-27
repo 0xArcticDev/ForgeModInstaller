@@ -1,11 +1,10 @@
 package mekanism.api;
 
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.util.ActionResultType;
-import net.minecraft.util.Direction;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.player.Player;
 
 /**
- * Implement this in your TileEntity class if your block can be modified by a Configurator.
+ * Expose this as a capability on your TileEntity to allow if your block to be modified by a Configurator.
  *
  * @author aidancbrady
  */
@@ -15,23 +14,21 @@ public interface IConfigurable {
      * Called when a player shift-right clicks this block with a Configurator.
      *
      * @param player - the player who clicked the block
-     * @param side   - the side the block was clicked on
      *
      * @return action that was performed
      *
      * @apiNote Only called from the server
      */
-    ActionResultType onSneakRightClick(PlayerEntity player, Direction side);
+    InteractionResult onSneakRightClick(Player player);
 
     /**
-     * Called when a player right clicks this block with a Configurator.
+     * Called when a player right-clicks this block with a Configurator.
      *
      * @param player - the player who clicked the block
-     * @param side   - the side the block was clicked on
      *
      * @return action that was performed
      *
      * @apiNote Only called from the server
      */
-    ActionResultType onRightClick(PlayerEntity player, Direction side);
+    InteractionResult onRightClick(Player player);
 }

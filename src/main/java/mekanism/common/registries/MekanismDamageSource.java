@@ -2,38 +2,39 @@ package mekanism.common.registries;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import mcp.MethodsReturnNonnullByDefault;
 import mekanism.api.text.IHasTranslationKey;
-import net.minecraft.util.DamageSource;
-import net.minecraft.util.math.vector.Vector3d;
+import mekanism.common.Mekanism;
+import net.minecraft.MethodsReturnNonnullByDefault;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.phys.Vec3;
 
 //Note: This isn't an actual registry but should make things a bit cleaner
 @MethodsReturnNonnullByDefault
 public class MekanismDamageSource extends DamageSource implements IHasTranslationKey {
 
     public static final MekanismDamageSource LASER = new MekanismDamageSource("laser");
-    public static final MekanismDamageSource RADIATION = new MekanismDamageSource("radiation").setDamageBypassesArmor();
+    public static final MekanismDamageSource RADIATION = new MekanismDamageSource("radiation").bypassArmor();
 
     private final String translationKey;
 
-    private final Vector3d damageLocation;
+    private final Vec3 damageLocation;
 
 
     public MekanismDamageSource(String damageType) {
         this(damageType, null);
     }
 
-    private MekanismDamageSource(@Nonnull String damageType, @Nullable Vector3d damageLocation) {
-        super(damageType);
-        this.translationKey = "death.attack." + getDamageType();
+    private MekanismDamageSource(@Nonnull String damageType, @Nullable Vec3 damageLocation) {
+        super(Mekanism.MODID + "." + damageType);
+        this.translationKey = "death.attack." + getMsgId();
         this.damageLocation = damageLocation;
     }
 
     /**
      * Gets a new instance of this damage source, that is positioned at the given location.
      */
-    public MekanismDamageSource fromPosition(@Nonnull Vector3d damageLocation) {
-        return new MekanismDamageSource(getDamageType(), damageLocation);
+    public MekanismDamageSource fromPosition(@Nonnull Vec3 damageLocation) {
+        return new MekanismDamageSource(getMsgId(), damageLocation);
     }
 
     @Override
@@ -43,7 +44,7 @@ public class MekanismDamageSource extends DamageSource implements IHasTranslatio
 
     @Nullable
     @Override
-    public Vector3d getDamageLocation() {
+    public Vec3 getSourcePosition() {
         return damageLocation;
     }
 
@@ -60,38 +61,38 @@ public class MekanismDamageSource extends DamageSource implements IHasTranslatio
     }
 
     @Override
-    public MekanismDamageSource setDamageBypassesArmor() {
-        super.setDamageBypassesArmor();
+    public MekanismDamageSource bypassArmor() {
+        super.bypassArmor();
         return this;
     }
 
     @Override
-    public MekanismDamageSource setDamageAllowedInCreativeMode() {
-        super.setDamageAllowedInCreativeMode();
+    public MekanismDamageSource bypassInvul() {
+        super.bypassInvul();
         return this;
     }
 
     @Override
-    public MekanismDamageSource setDamageIsAbsolute() {
-        super.setDamageIsAbsolute();
+    public MekanismDamageSource bypassMagic() {
+        super.bypassMagic();
         return this;
     }
 
     @Override
-    public MekanismDamageSource setFireDamage() {
-        super.setFireDamage();
+    public MekanismDamageSource setIsFire() {
+        super.setIsFire();
         return this;
     }
 
     @Override
-    public MekanismDamageSource setDifficultyScaled() {
-        super.setDifficultyScaled();
+    public MekanismDamageSource setScalesWithDifficulty() {
+        super.setScalesWithDifficulty();
         return this;
     }
 
     @Override
-    public MekanismDamageSource setMagicDamage() {
-        super.setMagicDamage();
+    public MekanismDamageSource setMagic() {
+        super.setMagic();
         return this;
     }
 }

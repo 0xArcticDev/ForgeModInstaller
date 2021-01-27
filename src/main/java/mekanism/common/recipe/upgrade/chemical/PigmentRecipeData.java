@@ -5,7 +5,6 @@ import java.util.function.Predicate;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
-import mcp.MethodsReturnNonnullByDefault;
 import mekanism.api.chemical.ChemicalTankBuilder;
 import mekanism.api.chemical.pigment.IPigmentHandler;
 import mekanism.api.chemical.pigment.IPigmentHandler.IMekanismPigmentHandler;
@@ -15,15 +14,16 @@ import mekanism.api.chemical.pigment.PigmentStack;
 import mekanism.common.capabilities.Capabilities;
 import mekanism.common.tile.base.SubstanceType;
 import mekanism.common.tile.base.TileEntityMekanism;
-import net.minecraft.nbt.ListNBT;
-import net.minecraft.util.Direction;
+import net.minecraft.MethodsReturnNonnullByDefault;
+import net.minecraft.core.Direction;
+import net.minecraft.nbt.ListTag;
 import net.minecraftforge.common.capabilities.Capability;
 
 @ParametersAreNonnullByDefault
 @MethodsReturnNonnullByDefault
 public class PigmentRecipeData extends ChemicalRecipeData<Pigment, PigmentStack, IPigmentTank, IPigmentHandler> {
 
-    public PigmentRecipeData(ListNBT tanks) {
+    public PigmentRecipeData(ListTag tanks) {
         super(tanks);
     }
 
@@ -63,7 +63,7 @@ public class PigmentRecipeData extends ChemicalRecipeData<Pigment, PigmentStack,
 
     @Override
     protected Capability<IPigmentHandler> getCapability() {
-        return Capabilities.PIGMENT_HANDLER_CAPABILITY;
+        return Capabilities.PIGMENT_HANDLER;
     }
 
     @Override

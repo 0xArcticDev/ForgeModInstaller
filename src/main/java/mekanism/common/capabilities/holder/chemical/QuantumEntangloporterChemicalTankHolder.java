@@ -12,10 +12,10 @@ import mekanism.common.capabilities.holder.QuantumEntangloporterConfigHolder;
 import mekanism.common.content.entangloporter.InventoryFrequency;
 import mekanism.common.lib.transmitter.TransmissionType;
 import mekanism.common.tile.TileEntityQuantumEntangloporter;
-import net.minecraft.util.Direction;
+import net.minecraft.core.Direction;
 
 public class QuantumEntangloporterChemicalTankHolder<CHEMICAL extends Chemical<CHEMICAL>, STACK extends ChemicalStack<CHEMICAL>,
-      TANK extends IChemicalTank<CHEMICAL, STACK>> extends QuantumEntangloporterConfigHolder implements IChemicalTankHolder<CHEMICAL, STACK, TANK> {
+      TANK extends IChemicalTank<CHEMICAL, STACK>> extends QuantumEntangloporterConfigHolder<TANK> implements IChemicalTankHolder<CHEMICAL, STACK, TANK> {
 
     private final BiFunction<InventoryFrequency, Direction, List<TANK>> tankResolver;
     private final TransmissionType transmissionType;

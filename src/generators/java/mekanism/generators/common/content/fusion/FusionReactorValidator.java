@@ -15,14 +15,14 @@ import mekanism.common.lib.multiblock.Structure.Axis;
 import mekanism.common.lib.multiblock.StructureHelper;
 import mekanism.generators.common.registries.GeneratorsBlockTypes;
 import mekanism.generators.common.tile.fusion.TileEntityFusionReactorController;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
 
 public class FusionReactorValidator extends CuboidStructureValidator<FusionReactorMultiblockData> {
 
     private static final VoxelCuboid BOUNDS = new VoxelCuboid(5, 5, 5);
-    private static final byte[][] ALLOWED_GRID = new byte[][]{
+    private static final byte[][] ALLOWED_GRID = {
           {0, 0, 1, 0, 0},
           {0, 1, 2, 1, 0},
           {1, 2, 2, 2, 1},
@@ -36,6 +36,7 @@ public class FusionReactorValidator extends CuboidStructureValidator<FusionReact
         if (relative.isWall()) {
             Axis axis = Axis.get(cuboid.getSide(pos));
             Axis h = axis.horizontal(), v = axis.vertical();
+            //Note: This ends up becoming immutable by doing this but that is fine and doesn't really matter
             pos = pos.subtract(cuboid.getMinPos());
             return StructureRequirement.REQUIREMENTS[ALLOWED_GRID[h.getCoord(pos)][v.getCoord(pos)]];
         }
@@ -55,7 +56,7 @@ public class FusionReactorValidator extends CuboidStructureValidator<FusionReact
     }
 
     @Override
-    protected CasingType getCasingType(BlockPos pos, BlockState state) {
+    protected CasingType getCasingType(BlockState state) {
         Block block = state.getBlock();
         if (BlockType.is(block, GeneratorsBlockTypes.FUSION_REACTOR_FRAME)) {
             return CasingType.FRAME;

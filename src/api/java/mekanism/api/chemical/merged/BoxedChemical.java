@@ -3,7 +3,6 @@ package mekanism.api.chemical.merged;
 import java.util.Objects;
 import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
-import mcp.MethodsReturnNonnullByDefault;
 import mekanism.api.MekanismAPI;
 import mekanism.api.annotations.FieldsAreNonnullByDefault;
 import mekanism.api.chemical.Chemical;
@@ -13,52 +12,73 @@ import mekanism.api.chemical.infuse.InfuseType;
 import mekanism.api.chemical.pigment.Pigment;
 import mekanism.api.chemical.slurry.Slurry;
 import mekanism.api.text.IHasTextComponent;
-import net.minecraft.nbt.CompoundNBT;
-import net.minecraft.network.PacketBuffer;
-import net.minecraft.util.text.ITextComponent;
+import net.minecraft.MethodsReturnNonnullByDefault;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.chat.Component;
 
+/**
+ *
+ */
 @FieldsAreNonnullByDefault
 @ParametersAreNonnullByDefault
 @MethodsReturnNonnullByDefault
 public class BoxedChemical implements IHasTextComponent {
 
-    //TODO: Make a subclass for the empty implementation?
+    /**
+     * Empty Boxed Chemical instance.
+     */
     public static final BoxedChemical EMPTY = new BoxedChemical(ChemicalType.GAS, MekanismAPI.EMPTY_GAS);
 
-    @SuppressWarnings("RedundantCast")
-    public static BoxedChemical read(PacketBuffer buffer) {
-        //Note: Casts are needed for compiling so it knows how to read it properly
-        ChemicalType chemicalType = buffer.readEnumValue(ChemicalType.class);
-        if (chemicalType == ChemicalType.GAS) {
-            return new BoxedChemical(chemicalType, (Gas) buffer.readRegistryId());
-        } else if (chemicalType == ChemicalType.INFUSION) {
-            return new BoxedChemical(chemicalType, (InfuseType) buffer.readRegistryId());
-        } else if (chemicalType == ChemicalType.PIGMENT) {
-            return new BoxedChemical(chemicalType, (Pigment) buffer.readRegistryId());
-        } else if (chemicalType == ChemicalType.SLURRY) {
-            return new BoxedChemical(chemicalType, (Slurry) buffer.readRegistryId());
-        } else {
-            throw new IllegalStateException("Unknown chemical type");
-        }
-    }
-
-    public static BoxedChemical read(@Nullable CompoundNBT nbt) {
-        ChemicalType chemicalType = ChemicalType.fromNBT(nbt);
-        Chemical<?> chemical = null;
-        if (chemicalType == ChemicalType.GAS) {
-            chemical = Gas.readFromNBT(nbt);
-        } else if (chemicalType == ChemicalType.INFUSION) {
-            chemical = InfuseType.readFromNBT(nbt);
-        } else if (chemicalType == ChemicalType.PIGMENT) {
-            chemical = Pigment.readFromNBT(nbt);
-        } else if (chemicalType == ChemicalType.SLURRY) {
-            chemical = Slurry.readFromNBT(nbt);
-        }
-        return chemicalType == null || chemical == null ? EMPTY : new BoxedChemical(chemicalType, chemical);
-    }
-
+    /**
+     * Boxes a Chemical.
+     *
+     * @param chemical Chemical to box.
+     *
+     * @return Boxed Chemical.
+     */
     public static BoxedChemical box(Chemical<?> chemical) {
+        if (chemical.isEmptyType()) {
+            return EMPTY;
+        }
         return new BoxedChemical(ChemicalType.getTypeFor(chemical), chemical);
+    }
+
+    /**
+     * Reads a Boxed Chemical from a Packet Buffer.
+     *
+     * @param buffer Buffer.
+     *
+     * @return Boxed Chemical.
+     */
+    public static BoxedChemical read(FriendlyByteBuf buffer) {
+        ChemicalType chemicalType = buffer.readEnum(ChemicalType.class);
+        return new BoxedChemical(chemicalType, switch (chemicalType) {
+            case GAS -> buffer.readRegistryIdSafe(Gas.class);
+            case INFUSION -> buffer.readRegistryIdSafe(InfuseType.class);
+            case PIGMENT -> buffer.readRegistryIdSafe(Pigment.class);
+            case SLURRY ->  buffer.readRegistryIdSafe(Slurry.class);
+        });
+    }
+
+    /**
+     * Reads a Boxed Chemical from a CompoundNBT.
+     *
+     * @param nbt NBT.
+     *
+     * @return Boxed Chemical.
+     */
+    public static BoxedChemical read(@Nullable CompoundTag nbt) {
+        ChemicalType chemicalType = ChemicalType.fromNBT(nbt);
+        if (chemicalType == null) {
+            return EMPTY;
+        }
+        return new BoxedChemical(chemicalType, switch (chemicalType) {
+            case GAS -> Gas.readFromNBT(nbt);
+            case INFUSION -> InfuseType.readFromNBT(nbt);
+            case PIGMENT -> Pigment.readFromNBT(nbt);
+            case SLURRY -> Slurry.readFromNBT(nbt);
+        });
     }
 
     private final ChemicalType chemicalType;
@@ -69,33 +89,60 @@ public class BoxedChemical implements IHasTextComponent {
         this.chemical = chemical;
     }
 
+    /**
+     * Gets whether this boxed chemical is empty.
+     *
+     * @return {@code true} if this boxed chemical is empty, {@code false} otherwise.
+     */
     public boolean isEmpty() {
         return this == EMPTY || chemical.isEmptyType();
     }
 
+    /**
+     * Gets the chemical type.
+     */
     public ChemicalType getChemicalType() {
         return chemicalType;
     }
 
-    public CompoundNBT write(CompoundNBT nbt) {
+    /**
+     * Writes this BoxedChemical to a defined tag compound.
+     *
+     * @param nbt - tag compound to write to
+     *
+     * @return tag compound with this BoxedChemical's data
+     */
+    public CompoundTag write(CompoundTag nbt) {
         chemicalType.write(nbt);
         chemical.write(nbt);
         return nbt;
     }
 
-    public void write(PacketBuffer buffer) {
-        buffer.writeEnumValue(chemicalType);
-        if (chemicalType == ChemicalType.GAS) {
-            buffer.writeRegistryId((Gas) chemical);
-        } else if (chemicalType == ChemicalType.INFUSION) {
-            buffer.writeRegistryId((InfuseType) chemical);
-        } else if (chemicalType == ChemicalType.PIGMENT) {
-            buffer.writeRegistryId((Pigment) chemical);
-        } else if (chemicalType == ChemicalType.SLURRY) {
-            buffer.writeRegistryId((Slurry) chemical);
-        } else {
-            throw new IllegalStateException("Unknown chemical type");
+    /**
+     * Writes this BoxedChemical to a Packet Buffer.
+     *
+     * @param buffer - Buffer to write to.
+     */
+    public void write(FriendlyByteBuf buffer) {
+        buffer.writeEnum(chemicalType);
+        switch (chemicalType) {
+            case GAS -> buffer.writeRegistryId(MekanismAPI.gasRegistry(), (Gas) chemical);
+            case INFUSION -> buffer.writeRegistryId(MekanismAPI.infuseTypeRegistry(), (InfuseType) chemical);
+            case PIGMENT -> buffer.writeRegistryId(MekanismAPI.pigmentRegistry(), (Pigment) chemical);
+            case SLURRY -> buffer.writeRegistryId(MekanismAPI.slurryRegistry(), (Slurry) chemical);
         }
+    }
+
+    /**
+     * Gets the internal chemical that was boxed.
+     */
+    public Chemical<?> getChemical() {
+        return chemical;
+    }
+
+    @Override
+    public Component getTextComponent() {
+        return chemical.getTextComponent();
     }
 
     @Override
@@ -113,14 +160,5 @@ public class BoxedChemical implements IHasTextComponent {
     @Override
     public int hashCode() {
         return Objects.hash(chemicalType, chemical);
-    }
-
-    public Chemical<?> getChemical() {
-        return chemical;
-    }
-
-    @Override
-    public ITextComponent getTextComponent() {
-        return chemical.getTextComponent();
     }
 }

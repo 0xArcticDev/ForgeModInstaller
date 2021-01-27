@@ -1,19 +1,25 @@
 package mekanism.common.util;
 
-import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
 import javax.annotation.Nonnull;
 import mekanism.api.Action;
+import mekanism.api.AutomationType;
+import mekanism.api.NBTConstants;
 import mekanism.api.fluid.IExtendedFluidTank;
-import mekanism.api.inventory.AutomationType;
+import mekanism.api.providers.IFluidProvider;
+import mekanism.common.capabilities.fluid.BasicFluidTank;
 import mekanism.common.content.network.distribution.FluidHandlerTarget;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.tileentity.TileEntity;
-import net.minecraft.util.Direction;
-import net.minecraft.util.Hand;
+import net.minecraft.core.Direction;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.material.Fluids;
+import net.minecraftforge.client.RenderProperties;
 import net.minecraftforge.fluids.FluidStack;
 import net.minecraftforge.fluids.FluidUtil;
 import net.minecraftforge.fluids.capability.CapabilityFluidHandler;
@@ -26,15 +32,44 @@ public final class FluidUtils {
     private FluidUtils() {
     }
 
-    public static void emit(IExtendedFluidTank tank, TileEntity from) {
+    public static ItemStack getFilledVariant(ItemStack toFill, int capacity, IFluidProvider provider) {
+        IExtendedFluidTank dummyTank = BasicFluidTank.create(capacity, null);
+        //Manually handle filling it as capabilities are not necessarily loaded yet (at least not on the first call to this, which is made via fillItemGroup)
+        dummyTank.setStack(provider.getFluidStack(dummyTank.getCapacity()));
+        ItemDataUtils.writeContainers(toFill, NBTConstants.FLUID_TANKS, Collections.singletonList(dummyTank));
+        //The item is now filled return it for convenience
+        return toFill;
+    }
+
+    public static OptionalInt getRGBDurabilityForDisplay(ItemStack stack) {
+        FluidStack fluidStack = StorageUtils.getStoredFluidFromNBT(stack);
+        if (!fluidStack.isEmpty()) {
+            //TODO: Technically doesn't support things where the color is part of the texture such as lava
+            // for chemicals it is supported via allowing people to override getColorRepresentation in their
+            // chemicals
+            if (fluidStack.getFluid().isSame(Fluids.LAVA)) {//Special case lava
+                return OptionalInt.of(0xFFDB6B19);
+            }
+            try {
+                //Try to get the color tint of the fluid. There is a chance this will fail on servers even though
+                // we only call this on the client side. But just in case try catch it in case something causes
+                // it to be called on the server
+                return OptionalInt.of(RenderProperties.get(fluidStack.getFluid()).getColorTint(fluidStack));
+            } catch (Throwable ignored) {
+            }
+        }
+        return OptionalInt.empty();
+    }
+
+    public static void emit(IExtendedFluidTank tank, BlockEntity from) {
         emit(EnumSet.allOf(Direction.class), tank, from);
     }
 
-    public static void emit(Set<Direction> outputSides, IExtendedFluidTank tank, TileEntity from) {
+    public static void emit(Set<Direction> outputSides, IExtendedFluidTank tank, BlockEntity from) {
         emit(outputSides, tank, from, tank.getCapacity());
     }
 
-    public static void emit(Set<Direction> outputSides, IExtendedFluidTank tank, TileEntity from, int maxOutput) {
+    public static void emit(Set<Direction> outputSides, IExtendedFluidTank tank, BlockEntity from, int maxOutput) {
         if (!tank.isEmpty() && maxOutput > 0) {
             tank.extract(emit(outputSides, tank.extract(maxOutput, Action.SIMULATE, AutomationType.INTERNAL), from), Action.EXECUTE, AutomationType.INTERNAL);
         }
@@ -49,30 +84,22 @@ public final class FluidUtils {
      *
      * @return the amount of fluid emitted
      */
-    public static int emit(Set<Direction> sides, @Nonnull FluidStack stack, TileEntity from) {
+    public static int emit(Set<Direction> sides, @Nonnull FluidStack stack, BlockEntity from) {
         if (stack.isEmpty() || sides.isEmpty()) {
             return 0;
         }
         FluidStack toSend = stack.copy();
-        //Fake that we have one target given we know that no sides will overlap
-        // This allows us to have slightly better performance
-        FluidHandlerTarget target = new FluidHandlerTarget(stack);
-        EmitUtils.forEachSide(from.getWorld(), from.getPos(), sides, (acceptor, side) -> {
-            //Insert to access side
-            Direction accessSide = side.getOpposite();
-            //Collect cap
-            CapabilityUtils.getCapability(acceptor, CapabilityFluidHandler.FLUID_HANDLER_CAPABILITY, accessSide).ifPresent(handler -> {
+        FluidHandlerTarget target = new FluidHandlerTarget(stack, 6);
+        EmitUtils.forEachSide(from.getLevel(), from.getBlockPos(), sides, (acceptor, side) -> {
+            //Insert to access side and collect the cap if it is present, and we can insert the type of the stack into it
+            CapabilityUtils.getCapability(acceptor, CapabilityFluidHandler.FLUID_HANDLER_CAPABILITY, side.getOpposite()).ifPresent(handler -> {
                 if (canFill(handler, toSend)) {
-                    target.addHandler(accessSide, handler);
+                    target.addHandler(handler);
                 }
             });
         });
-
-        int curHandlers = target.getHandlers().size();
-        if (curHandlers > 0) {
-            Set<FluidHandlerTarget> targets = new ObjectOpenHashSet<>();
-            targets.add(target);
-            return EmitUtils.sendToAcceptors(targets, curHandlers, stack.getAmount(), toSend);
+        if (target.getHandlerCount() > 0) {
+            return EmitUtils.sendToAcceptors(target, stack.getAmount(), toSend);
         }
         return 0;
     }
@@ -81,7 +108,7 @@ public final class FluidUtils {
         return handler.fill(stack, FluidAction.SIMULATE) > 0;
     }
 
-    public static boolean handleTankInteraction(PlayerEntity player, Hand hand, ItemStack itemStack, IExtendedFluidTank fluidTank) {
+    public static boolean handleTankInteraction(Player player, InteractionHand hand, ItemStack itemStack, IExtendedFluidTank fluidTank) {
         ItemStack copyStack = StackUtils.size(itemStack, 1);
         Optional<IFluidHandlerItem> fluidHandlerItem = FluidUtil.getFluidHandler(copyStack).resolve();
         if (fluidHandlerItem.isPresent()) {
@@ -91,7 +118,7 @@ public final class FluidUtils {
                 //If we don't have a fluid stored try draining in general
                 fluidInItem = handler.drain(Integer.MAX_VALUE, FluidAction.SIMULATE);
             } else {
-                //Otherwise try draining the same type of fluid we have stored
+                //Otherwise, try draining the same type of fluid we have stored
                 // We do this to better support multiple tanks in case the fluid we have stored we could pull out of a block's
                 // second tank but just asking to drain a specific amount
                 fluidInItem = handler.drain(new FluidStack(fluidTank.getFluid(), Integer.MAX_VALUE), FluidAction.SIMULATE);
@@ -102,11 +129,11 @@ public final class FluidUtils {
                     ItemStack container = handler.getContainer();
                     if (filled > 0) {
                         if (itemStack.getCount() == 1) {
-                            player.setHeldItem(hand, container);
-                        } else if (itemStack.getCount() > 1 && player.inventory.addItemStackToInventory(container)) {
+                            player.setItemInHand(hand, container);
+                        } else if (itemStack.getCount() > 1 && player.getInventory().add(container)) {
                             itemStack.shrink(1);
                         } else {
-                            player.dropItem(container, false, true);
+                            player.drop(container, false, true);
                             itemStack.shrink(1);
                         }
                         fluidTank.extract(filled, Action.EXECUTE, AutomationType.MANUAL);
@@ -125,17 +152,17 @@ public final class FluidUtils {
                         if (player.isCreative()) {
                             filled = true;
                         } else if (!container.isEmpty()) {
-                            if (container.getCount() == 1) {
-                                player.setHeldItem(hand, container);
+                            if (itemStack.getCount() == 1) {
+                                player.setItemInHand(hand, container);
                                 filled = true;
-                            } else if (player.inventory.addItemStackToInventory(container)) {
+                            } else if (player.getInventory().add(container)) {
                                 itemStack.shrink(1);
                                 filled = true;
                             }
                         } else {
                             itemStack.shrink(1);
                             if (itemStack.isEmpty()) {
-                                player.setHeldItem(hand, ItemStack.EMPTY);
+                                player.setItemInHand(hand, ItemStack.EMPTY);
                             }
                             filled = true;
                         }

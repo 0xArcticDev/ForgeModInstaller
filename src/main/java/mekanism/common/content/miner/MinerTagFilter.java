@@ -1,90 +1,81 @@
 package mekanism.common.content.miner;
 
-import java.util.Set;
 import mekanism.api.NBTConstants;
+import mekanism.common.base.TagCache;
 import mekanism.common.content.filter.FilterType;
 import mekanism.common.content.filter.ITagFilter;
+import mekanism.common.lib.WildcardMatcher;
 import mekanism.common.network.BasePacketHandler;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.CompoundNBT;
-import net.minecraft.network.PacketBuffer;
-import net.minecraft.util.ResourceLocation;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.world.level.block.state.BlockState;
 
 public class MinerTagFilter extends MinerFilter<MinerTagFilter> implements ITagFilter<MinerTagFilter> {
 
     private String tagName;
 
-    @Override
-    public boolean canFilter(BlockState state) {
-        Set<ResourceLocation> tags = state.getBlock().getTags();
-        if (tags.isEmpty()) {
-            return false;
-        }
-        for (ResourceLocation tag : tags) {
-            String tagAsString = tag.toString();
-            if (tagName.equals(tagAsString) || tagName.equals("*")) {
-                return true;
-            } else if (tagName.endsWith("*") && !tagName.startsWith("*")) {
-                if (tagAsString.startsWith(tagName.substring(0, tagName.length() - 1))) {
-                    return true;
-                }
-            } else if (tagName.startsWith("*") && !tagName.endsWith("*")) {
-                if (tagAsString.endsWith(tagName.substring(1))) {
-                    return true;
-                }
-            } else if (tagName.startsWith("*") && tagName.endsWith("*")) {
-                if (tagAsString.contains(tagName.substring(1, tagName.length() - 1))) {
-                    return true;
-                }
-            }
-        }
-        return false;
+    public MinerTagFilter(String tagName) {
+        this.tagName = tagName;
+    }
+
+    public MinerTagFilter() {
+    }
+
+    public MinerTagFilter(MinerTagFilter filter) {
+        super(filter);
+        tagName = filter.tagName;
     }
 
     @Override
-    public CompoundNBT write(CompoundNBT nbtTags) {
+    public boolean canFilter(BlockState state) {
+        return state.getTags().anyMatch(tag -> WildcardMatcher.matches(tagName, tag));
+    }
+
+    @Override
+    public boolean hasBlacklistedElement() {
+        return TagCache.tagHasMinerBlacklisted(tagName);
+    }
+
+    @Override
+    public CompoundTag write(CompoundTag nbtTags) {
         super.write(nbtTags);
         nbtTags.putString(NBTConstants.TAG_NAME, tagName);
         return nbtTags;
     }
 
     @Override
-    public void read(CompoundNBT nbtTags) {
+    public void read(CompoundTag nbtTags) {
         super.read(nbtTags);
         tagName = nbtTags.getString(NBTConstants.TAG_NAME);
     }
 
     @Override
-    public void write(PacketBuffer buffer) {
+    public void write(FriendlyByteBuf buffer) {
         super.write(buffer);
-        buffer.writeString(tagName);
+        buffer.writeUtf(tagName);
     }
 
     @Override
-    public void read(PacketBuffer dataStream) {
+    public void read(FriendlyByteBuf dataStream) {
         super.read(dataStream);
         tagName = BasePacketHandler.readString(dataStream);
     }
 
     @Override
     public int hashCode() {
-        int code = 1;
+        int code = super.hashCode();
         code = 31 * code + tagName.hashCode();
         return code;
     }
 
     @Override
-    public boolean equals(Object filter) {
-        return filter instanceof MinerTagFilter && ((MinerTagFilter) filter).tagName.equals(tagName);
+    public boolean equals(Object o) {
+        return super.equals(o) && o instanceof MinerTagFilter filter && filter.tagName.equals(tagName);
     }
 
     @Override
     public MinerTagFilter clone() {
-        MinerTagFilter filter = new MinerTagFilter();
-        filter.replaceStack = replaceStack;
-        filter.requireStack = requireStack;
-        filter.tagName = tagName;
-        return filter;
+        return new MinerTagFilter(this);
     }
 
     @Override

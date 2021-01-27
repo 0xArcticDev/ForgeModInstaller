@@ -3,9 +3,9 @@ package mekanism.common.inventory.container.sync;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import javax.annotation.Nullable;
-import mekanism.common.network.container.property.BlockPosPropertyData;
-import mekanism.common.network.container.property.PropertyData;
-import net.minecraft.util.math.BlockPos;
+import mekanism.common.network.to_client.container.property.BlockPosPropertyData;
+import mekanism.common.network.to_client.container.property.PropertyData;
+import net.minecraft.core.BlockPos;
 
 public class SyncableBlockPos implements ISyncableData {
 

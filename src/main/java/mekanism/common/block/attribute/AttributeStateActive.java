@@ -2,38 +2,54 @@ package mekanism.common.block.attribute;
 
 import java.util.List;
 import javax.annotation.Nonnull;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.state.BooleanProperty;
-import net.minecraft.state.Property;
+import mekanism.common.block.states.BlockStateHelper;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockBehaviour;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BooleanProperty;
+import net.minecraft.world.level.block.state.properties.Property;
 
 public class AttributeStateActive implements AttributeState {
 
     private static final BooleanProperty activeProperty = BooleanProperty.create("active");
 
+    private final int ambientLight;
+
+    AttributeStateActive(int ambientLight) {
+        this.ambientLight = ambientLight;
+    }
+
     public boolean isActive(BlockState state) {
-        return state.get(activeProperty);
+        return state.getValue(activeProperty);
     }
 
     public BlockState setActive(@Nonnull BlockState state, boolean active) {
-        return state.with(activeProperty, active);
+        return state.setValue(activeProperty, active);
     }
 
     @Override
     public BlockState copyStateData(BlockState oldState, BlockState newState) {
-        if (Attribute.has(newState.getBlock(), AttributeStateActive.class)) {
-            newState = newState.with(activeProperty, oldState.get(activeProperty));
+        if (Attribute.has(newState, AttributeStateActive.class)) {
+            newState = newState.setValue(activeProperty, oldState.getValue(activeProperty));
         }
         return newState;
     }
 
     @Override
     public BlockState getDefaultState(@Nonnull BlockState state) {
-        return state.with(activeProperty, false);
+        return state.setValue(activeProperty, false);
     }
 
     @Override
     public void fillBlockStateContainer(Block block, List<Property<?>> properties) {
         properties.add(activeProperty);
+    }
+
+    @Override
+    public void adjustProperties(BlockBehaviour.Properties props) {
+        if (ambientLight > 0) {
+            //If we have ambient light, adjust the light level to factor in the ambient light level when it is active
+            BlockStateHelper.applyLightLevelAdjustments(props, state -> isActive(state) ? ambientLight : 0);
+        }
     }
 }

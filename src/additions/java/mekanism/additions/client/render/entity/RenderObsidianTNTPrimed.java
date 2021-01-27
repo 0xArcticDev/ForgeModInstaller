@@ -1,49 +1,54 @@
 package mekanism.additions.client.render.entity;
 
-import com.mojang.blaze3d.matrix.MatrixStack;
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.math.Vector3f;
 import javax.annotation.Nonnull;
 import mekanism.additions.common.entity.EntityObsidianTNT;
 import mekanism.additions.common.registries.AdditionsBlocks;
-import net.minecraft.client.renderer.IRenderTypeBuffer;
+import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.block.BlockRenderDispatcher;
 import net.minecraft.client.renderer.entity.EntityRenderer;
-import net.minecraft.client.renderer.entity.EntityRendererManager;
-import net.minecraft.client.renderer.entity.TNTMinecartRenderer;
-import net.minecraft.client.renderer.texture.AtlasTexture;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.vector.Vector3f;
+import net.minecraft.client.renderer.entity.EntityRendererProvider;
+import net.minecraft.client.renderer.entity.TntMinecartRenderer;
+import net.minecraft.client.renderer.texture.TextureAtlas;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.Mth;
 
 public class RenderObsidianTNTPrimed extends EntityRenderer<EntityObsidianTNT> {
 
-    public RenderObsidianTNTPrimed(EntityRendererManager renderManager) {
-        super(renderManager);
-        shadowSize = 0.5F;
+    private final BlockRenderDispatcher blockRenderer;
+
+    public RenderObsidianTNTPrimed(EntityRendererProvider.Context context) {
+        super(context);
+        shadowRadius = 0.5F;
+        this.blockRenderer = context.getBlockRenderDispatcher();
     }
 
     @Override
-    public void render(@Nonnull EntityObsidianTNT tnt, float entityYaw, float partialTick, @Nonnull MatrixStack matrix, @Nonnull IRenderTypeBuffer renderer, int light) {
-        matrix.push();
+    public void render(@Nonnull EntityObsidianTNT tnt, float entityYaw, float partialTick, @Nonnull PoseStack matrix, @Nonnull MultiBufferSource renderer, int light) {
+        matrix.pushPose();
         matrix.translate(0, 0.5, 0);
         if (tnt.getFuse() - partialTick + 1.0F < 10.0F) {
             float f = 1.0F - (tnt.getFuse() - partialTick + 1.0F) / 10.0F;
-            f = MathHelper.clamp(f, 0.0F, 1.0F);
+            f = Mth.clamp(f, 0.0F, 1.0F);
             f = f * f;
             f = f * f;
             float f1 = 1.0F + f * 0.3F;
             matrix.scale(f1, f1, f1);
         }
 
-        matrix.rotate(Vector3f.YP.rotationDegrees(-90.0F));
+        matrix.mulPose(Vector3f.YP.rotationDegrees(-90.0F));
         matrix.translate(-0.5, -0.5, 0.5);
-        matrix.rotate(Vector3f.YP.rotationDegrees(90.0F));
-        TNTMinecartRenderer.renderTntFlash(AdditionsBlocks.OBSIDIAN_TNT.getBlock().getDefaultState(), matrix, renderer, light, tnt.getFuse() / 5 % 2 == 0);
-        matrix.pop();
+        matrix.mulPose(Vector3f.YP.rotationDegrees(90.0F));
+        TntMinecartRenderer.renderWhiteSolidBlock(blockRenderer, AdditionsBlocks.OBSIDIAN_TNT.getBlock().defaultBlockState(), matrix, renderer, light,
+              tnt.getFuse() / 5 % 2 == 0);
+        matrix.popPose();
         super.render(tnt, entityYaw, partialTick, matrix, renderer, light);
     }
 
     @Nonnull
     @Override
-    public ResourceLocation getEntityTexture(@Nonnull EntityObsidianTNT entity) {
-        return AtlasTexture.LOCATION_BLOCKS_TEXTURE;
+    public ResourceLocation getTextureLocation(@Nonnull EntityObsidianTNT entity) {
+        return TextureAtlas.LOCATION_BLOCKS;
     }
 }

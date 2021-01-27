@@ -3,20 +3,18 @@ package mekanism.common.item.block.transmitter;
 import java.util.List;
 import javax.annotation.Nonnull;
 import mekanism.api.text.EnumColor;
-import mekanism.client.MekKeyHandler;
-import mekanism.client.MekanismKeyHandler;
+import mekanism.client.key.MekKeyHandler;
+import mekanism.client.key.MekanismKeyHandler;
 import mekanism.common.MekanismLang;
 import mekanism.common.block.attribute.Attribute;
 import mekanism.common.block.transmitter.BlockUniversalCable;
 import mekanism.common.item.block.ItemBlockMultipartAble;
 import mekanism.common.tier.CableTier;
 import mekanism.common.util.text.EnergyDisplay;
-import net.minecraft.client.util.ITooltipFlag;
-import net.minecraft.item.ItemStack;
-import net.minecraft.util.text.ITextComponent;
-import net.minecraft.world.World;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.api.distmarker.OnlyIn;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.TooltipFlag;
+import net.minecraft.world.level.Level;
 
 public class ItemBlockUniversalCable extends ItemBlockMultipartAble<BlockUniversalCable> {
 
@@ -31,9 +29,8 @@ public class ItemBlockUniversalCable extends ItemBlockMultipartAble<BlockUnivers
     }
 
     @Override
-    @OnlyIn(Dist.CLIENT)
-    public void addInformation(@Nonnull ItemStack stack, World world, @Nonnull List<ITextComponent> tooltip, @Nonnull ITooltipFlag flag) {
-        if (MekKeyHandler.getIsKeyPressed(MekanismKeyHandler.detailsKey)) {
+    public void appendHoverText(@Nonnull ItemStack stack, Level world, @Nonnull List<Component> tooltip, @Nonnull TooltipFlag flag) {
+        if (MekKeyHandler.isKeyPressed(MekanismKeyHandler.detailsKey)) {
             tooltip.add(MekanismLang.CAPABLE_OF_TRANSFERRING.translateColored(EnumColor.DARK_GRAY));
             tooltip.add(MekanismLang.GENERIC_TRANSFER.translateColored(EnumColor.PURPLE, MekanismLang.ENERGY_FORGE_SHORT, MekanismLang.FORGE));
             tooltip.add(MekanismLang.GENERIC_TRANSFER.translateColored(EnumColor.PURPLE, MekanismLang.ENERGY_EU_SHORT, MekanismLang.IC2));
@@ -41,7 +38,7 @@ public class ItemBlockUniversalCable extends ItemBlockMultipartAble<BlockUnivers
         } else {
             CableTier tier = getTier();
             tooltip.add(MekanismLang.CAPACITY_PER_TICK.translateColored(EnumColor.INDIGO, EnumColor.GRAY, EnergyDisplay.of(tier.getCableCapacity())));
-            tooltip.add(MekanismLang.HOLD_FOR_DETAILS.translateColored(EnumColor.GRAY, EnumColor.INDIGO, MekanismKeyHandler.detailsKey.func_238171_j_()));
+            tooltip.add(MekanismLang.HOLD_FOR_DETAILS.translateColored(EnumColor.GRAY, EnumColor.INDIGO, MekanismKeyHandler.detailsKey.getTranslatedKeyMessage()));
         }
     }
 }

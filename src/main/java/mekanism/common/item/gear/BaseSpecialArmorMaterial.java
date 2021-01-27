@@ -1,39 +1,39 @@
 package mekanism.common.item.gear;
 
 import javax.annotation.ParametersAreNonnullByDefault;
-import mcp.MethodsReturnNonnullByDefault;
-import net.minecraft.inventory.EquipmentSlotType;
-import net.minecraft.item.IArmorMaterial;
-import net.minecraft.item.crafting.Ingredient;
-import net.minecraft.util.SoundEvent;
-import net.minecraft.util.SoundEvents;
+import net.minecraft.MethodsReturnNonnullByDefault;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.ArmorMaterial;
+import net.minecraft.world.item.crafting.Ingredient;
 
 @ParametersAreNonnullByDefault
 @MethodsReturnNonnullByDefault
-public abstract class BaseSpecialArmorMaterial implements IArmorMaterial {
+public abstract class BaseSpecialArmorMaterial implements ArmorMaterial {
 
     @Override
-    public int getDurability(EquipmentSlotType slotType) {
+    public int getDurabilityForSlot(EquipmentSlot slotType) {
         return 0;
     }
 
     @Override
-    public int getEnchantability() {
+    public int getEnchantmentValue() {
         return 0;
     }
 
     @Override
-    public SoundEvent getSoundEvent() {
-        return SoundEvents.ITEM_ARMOR_EQUIP_GENERIC;
+    public SoundEvent getEquipSound() {
+        return SoundEvents.ARMOR_EQUIP_GENERIC;
     }
 
     @Override
-    public Ingredient getRepairMaterial() {
+    public Ingredient getRepairIngredient() {
         return Ingredient.EMPTY;
     }
 
     @Override
-    public int getDamageReductionAmount(EquipmentSlotType slotType) {
+    public int getDefenseForSlot(EquipmentSlot slotType) {
         return 0;
     }
 

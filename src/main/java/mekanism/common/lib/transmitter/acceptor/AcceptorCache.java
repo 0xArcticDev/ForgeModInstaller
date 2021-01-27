@@ -3,14 +3,14 @@ package mekanism.common.lib.transmitter.acceptor;
 import java.util.Objects;
 import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
-import mcp.MethodsReturnNonnullByDefault;
 import mekanism.api.annotations.FieldsAreNonnullByDefault;
 import mekanism.common.content.network.transmitter.Transmitter;
 import mekanism.common.lib.transmitter.acceptor.AcceptorCache.AcceptorInfo;
 import mekanism.common.tile.transmitter.TileEntityTransmitter;
 import mekanism.common.util.CapabilityUtils;
-import net.minecraft.tileentity.TileEntity;
-import net.minecraft.util.Direction;
+import net.minecraft.MethodsReturnNonnullByDefault;
+import net.minecraft.core.Direction;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraftforge.common.capabilities.Capability;
 import net.minecraftforge.common.util.LazyOptional;
 import net.minecraftforge.common.util.NonNullConsumer;
@@ -24,11 +24,11 @@ public class AcceptorCache<ACCEPTOR> extends AbstractAcceptorCache<ACCEPTOR, Acc
         super(transmitter, transmitterTile);
     }
 
-    protected void updateCachedAcceptorAndListen(Direction side, TileEntity acceptorTile, LazyOptional<ACCEPTOR> acceptor) {
+    protected void updateCachedAcceptorAndListen(Direction side, BlockEntity acceptorTile, LazyOptional<ACCEPTOR> acceptor) {
         updateCachedAcceptorAndListen(side, acceptorTile, acceptor, acceptor, true);
     }
 
-    protected void updateCachedAcceptorAndListen(Direction side, TileEntity acceptorTile, LazyOptional<ACCEPTOR> acceptor, LazyOptional<?> sourceAcceptor,
+    protected void updateCachedAcceptorAndListen(Direction side, BlockEntity acceptorTile, LazyOptional<ACCEPTOR> acceptor, LazyOptional<?> sourceAcceptor,
           boolean sourceIsSame) {
         boolean dirtyAcceptor = false;
         if (cachedAcceptors.containsKey(side)) {
@@ -50,14 +50,14 @@ public class AcceptorCache<ACCEPTOR> extends AbstractAcceptorCache<ACCEPTOR, Acc
         }
         if (dirtyAcceptor) {
             transmitter.markDirtyAcceptor(side);
-            //If the capability is present and we want to add the listener, add a listener so that once it gets invalidated
+            //If the capability is present, and we want to add the listener, add a listener so that once it gets invalidated
             // we recheck that side assuming that the world and position is still loaded and our tile has not been removed
             NonNullConsumer<LazyOptional<ACCEPTOR>> refreshListener = getRefreshListener(side);
             if (sourceIsSame) {
-                //Add it to the actual acceptor as it is the same as the source and we can do so without any unchecked warnings
+                //Add it to the actual acceptor as it is the same as the source, and we can do so without any unchecked warnings
                 acceptor.addListener(refreshListener);
             } else {
-                //Otherwise use unchecked generics to add the listener to the source acceptor
+                //Otherwise, use unchecked generics to add the listener to the source acceptor
                 CapabilityUtils.addListener(sourceAcceptor, refreshListener);
             }
         }
@@ -78,10 +78,21 @@ public class AcceptorCache<ACCEPTOR> extends AbstractAcceptorCache<ACCEPTOR, Acc
         return LazyOptional.empty();
     }
 
+    @Nullable
+    public BlockEntity getConnectedAcceptorTile(Direction side) {
+        if (cachedAcceptors.containsKey(side)) {
+            BlockEntity tile = cachedAcceptors.get(side).getTile();
+            if (!tile.isRemoved()) {
+                return tile;
+            }
+        }
+        return null;
+    }
+
     /**
      * @apiNote Only call this from the server side
      */
-    public boolean isAcceptorAndListen(@Nullable TileEntity tile, Direction side, Capability<ACCEPTOR> capability) {
+    public boolean isAcceptorAndListen(@Nullable BlockEntity tile, Direction side, Capability<ACCEPTOR> capability) {
         LazyOptional<ACCEPTOR> acceptor = CapabilityUtils.getCapability(tile, capability, side.getOpposite());
         if (acceptor.isPresent()) {
             //Update the cached acceptor and if it changed, add a listener to it to listen for invalidation
@@ -96,7 +107,7 @@ public class AcceptorCache<ACCEPTOR> extends AbstractAcceptorCache<ACCEPTOR, Acc
         private LazyOptional<?> sourceAcceptor;
         private LazyOptional<ACCEPTOR> acceptor;
 
-        private AcceptorInfo(TileEntity tile, LazyOptional<?> sourceAcceptor, LazyOptional<ACCEPTOR> acceptor) {
+        private AcceptorInfo(BlockEntity tile, LazyOptional<?> sourceAcceptor, LazyOptional<ACCEPTOR> acceptor) {
             super(tile);
             this.acceptor = acceptor;
             this.sourceAcceptor = sourceAcceptor;
@@ -112,11 +123,7 @@ public class AcceptorCache<ACCEPTOR> extends AbstractAcceptorCache<ACCEPTOR, Acc
             if (o == this) {
                 return true;
             }
-            if (o instanceof AcceptorInfo) {
-                AcceptorInfo<?> other = (AcceptorInfo<?>) o;
-                return getTile().equals(other.getTile()) && sourceAcceptor.equals(other.sourceAcceptor) && acceptor.equals(other.acceptor);
-            }
-            return false;
+            return o instanceof AcceptorInfo<?> other && getTile().equals(other.getTile()) && sourceAcceptor.equals(other.sourceAcceptor) && acceptor.equals(other.acceptor);
         }
 
         @Override

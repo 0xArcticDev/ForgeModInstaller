@@ -1,38 +1,37 @@
 package mekanism.client.render.obj;
 
-import com.google.common.collect.ImmutableList;
-import com.mojang.blaze3d.matrix.MatrixStack;
+import com.mojang.blaze3d.vertex.PoseStack;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Random;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import mekanism.client.model.data.TransmitterModelData;
 import mekanism.client.render.obj.TransmitterModelConfiguration.IconStatus;
 import mekanism.common.tile.transmitter.TileEntityTransmitter;
 import mekanism.common.util.EnumUtils;
-import net.minecraft.block.BlockState;
 import net.minecraft.client.renderer.RenderType;
-import net.minecraft.client.renderer.model.BakedQuad;
-import net.minecraft.client.renderer.model.IBakedModel;
-import net.minecraft.client.renderer.model.IModelTransform;
-import net.minecraft.client.renderer.model.ItemCameraTransforms;
-import net.minecraft.client.renderer.model.ItemCameraTransforms.TransformType;
-import net.minecraft.client.renderer.model.ItemOverrideList;
-import net.minecraft.client.renderer.model.ModelBakery;
-import net.minecraft.client.renderer.model.RenderMaterial;
+import net.minecraft.client.renderer.block.model.BakedQuad;
+import net.minecraft.client.renderer.block.model.ItemOverrides;
+import net.minecraft.client.renderer.block.model.ItemTransforms;
+import net.minecraft.client.renderer.block.model.ItemTransforms.TransformType;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
-import net.minecraft.util.Direction;
-import net.minecraft.util.Direction.Axis;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.IBlockDisplayReader;
+import net.minecraft.client.resources.model.BakedModel;
+import net.minecraft.client.resources.model.Material;
+import net.minecraft.client.resources.model.ModelBakery;
+import net.minecraft.client.resources.model.ModelState;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.core.Direction.Axis;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.level.BlockAndTintGetter;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraftforge.client.MinecraftForgeClient;
 import net.minecraftforge.client.model.IModelBuilder;
 import net.minecraftforge.client.model.IModelConfiguration;
@@ -41,23 +40,23 @@ import net.minecraftforge.client.model.data.IModelData;
 import net.minecraftforge.client.model.geometry.IModelGeometryPart;
 import net.minecraftforge.client.model.obj.OBJModel;
 
-public class TransmitterBakedModel implements IBakedModel {
+public class TransmitterBakedModel implements BakedModel {
 
     private final OBJModel internal;
     @Nullable
     private final OBJModel glass;
     private final IModelConfiguration owner;
     private final ModelBakery bakery;
-    private final Function<RenderMaterial, TextureAtlasSprite> spriteGetter;
-    private final IModelTransform modelTransform;
-    private final ItemOverrideList overrides;
+    private final Function<Material, TextureAtlasSprite> spriteGetter;
+    private final ModelState modelTransform;
+    private final ItemOverrides overrides;
     private final ResourceLocation modelLocation;
-    private final IBakedModel bakedVariant;
+    private final BakedModel bakedVariant;
 
     private final Map<QuickHash, List<BakedQuad>> modelCache;
 
     public TransmitterBakedModel(OBJModel internal, @Nullable OBJModel glass, IModelConfiguration owner, ModelBakery bakery,
-          Function<RenderMaterial, TextureAtlasSprite> spriteGetter, IModelTransform modelTransform, ItemOverrideList overrides, ResourceLocation modelLocation) {
+          Function<Material, TextureAtlasSprite> spriteGetter, ModelState modelTransform, ItemOverrides overrides, ResourceLocation modelLocation) {
         //4^6 number of states, if we have a glass texture (support coloring), multiply by 2
         this.modelCache = new Object2ObjectOpenHashMap<>(glass == null ? 4_096 : 8_192);
         this.internal = internal;
@@ -69,31 +68,31 @@ public class TransmitterBakedModel implements IBakedModel {
         this.overrides = overrides;
         this.modelLocation = modelLocation;
         //We define our baked variant to be how the item is. As we should always have model data when we have a state
-        List<String> visible = Arrays.stream(EnumUtils.DIRECTIONS).map(side -> side.getName2() + (side.getAxis() == Axis.Y ? "NORMAL" : "NONE")).collect(Collectors.toList());
+        List<String> visible = Arrays.stream(EnumUtils.DIRECTIONS).map(side -> side.getName() + (side.getAxis() == Axis.Y ? "NORMAL" : "NONE")).toList();
         bakedVariant = internal.bake(new VisibleModelConfiguration(owner, visible), bakery, spriteGetter, modelTransform, overrides, modelLocation);
     }
 
     @Nonnull
     @Override
-    public List<BakedQuad> getQuads(@Nullable BlockState state, @Nullable Direction side, @Nonnull Random rand) {
+    public List<BakedQuad> getQuads(@Nullable BlockState state, @Nullable Direction side, @Nonnull RandomSource rand) {
         return getQuads(state, side, rand, EmptyModelData.INSTANCE);
     }
 
     @Nonnull
     @Override
-    public List<BakedQuad> getQuads(@Nullable BlockState state, @Nullable Direction side, @Nonnull Random rand, @Nonnull IModelData extraData) {
+    public List<BakedQuad> getQuads(@Nullable BlockState state, @Nullable Direction side, @Nonnull RandomSource rand, @Nonnull IModelData extraData) {
         if (side != null) {
-            return ImmutableList.of();
+            return Collections.emptyList();
         }
         if (extraData.hasProperty(TileEntityTransmitter.TRANSMITTER_PROPERTY)) {
             TransmitterModelData data = extraData.getData(TileEntityTransmitter.TRANSMITTER_PROPERTY);
-            RenderType layer = MinecraftForgeClient.getRenderLayer();
-            boolean hasColor = data.getHasColor() && layer == RenderType.getTranslucent();
+            RenderType layer = MinecraftForgeClient.getRenderType();
+            boolean hasColor = data.getHasColor() && layer == RenderType.translucent();
             QuickHash hash = new QuickHash(data.getConnectionsMap(), hasColor);
             if (!modelCache.containsKey(hash)) {
                 List<String> visible = new ArrayList<>();
                 for (Direction dir : EnumUtils.DIRECTIONS) {
-                    visible.add(dir.getString() + data.getConnectionType(dir).getString().toUpperCase(Locale.ROOT));
+                    visible.add(dir.getSerializedName() + data.getConnectionType(dir).getSerializedName().toUpperCase(Locale.ROOT));
                 }
                 List<BakedQuad> result = bake(new TransmitterModelConfiguration(owner, visible, extraData), hasColor).getQuads(state, null, rand, extraData);
                 modelCache.put(hash, result);
@@ -108,11 +107,11 @@ public class TransmitterBakedModel implements IBakedModel {
     /**
      * Rotates the pieces that need rotating.
      */
-    private IBakedModel bake(TransmitterModelConfiguration configuration, boolean hasColor) {
+    private BakedModel bake(TransmitterModelConfiguration configuration, boolean hasColor) {
         TextureAtlasSprite particle = spriteGetter.apply(configuration.resolveTexture("particle"));
         IModelBuilder<?> builder = IModelBuilder.of(configuration, overrides, particle);
         addPartQuads(configuration, builder, internal);
-        if (glass != null && hasColor && MinecraftForgeClient.getRenderLayer() == RenderType.getTranslucent()) {
+        if (glass != null && hasColor && MinecraftForgeClient.getRenderType() == RenderType.translucent()) {
             addPartQuads(configuration, builder, glass);
         }
         return builder.build();
@@ -122,7 +121,7 @@ public class TransmitterBakedModel implements IBakedModel {
         for (IModelGeometryPart part : glass.getParts()) {
             if (configuration.getPartVisibility(part)) {
                 String name = part.name();
-                IModelTransform transform = modelTransform;
+                ModelState transform = modelTransform;
                 if (name.endsWith("NONE")) {
                     Direction dir = directionForPiece(name);
                     //We should not have been able to get here if dir was null but check just in case
@@ -139,17 +138,17 @@ public class TransmitterBakedModel implements IBakedModel {
 
     @Nullable
     private static Direction directionForPiece(@Nonnull String piece) {
-        return Arrays.stream(EnumUtils.DIRECTIONS).filter(dir -> piece.startsWith(dir.getName2())).findFirst().orElse(null);
+        return Arrays.stream(EnumUtils.DIRECTIONS).filter(dir -> piece.startsWith(dir.getName())).findFirst().orElse(null);
     }
 
     @Override
-    public boolean isAmbientOcclusion() {
-        return bakedVariant.isAmbientOcclusion();
+    public boolean useAmbientOcclusion() {
+        return bakedVariant.useAmbientOcclusion();
     }
 
     @Override
-    public boolean isAmbientOcclusion(BlockState state) {
-        return bakedVariant.isAmbientOcclusion(state);
+    public boolean useAmbientOcclusion(BlockState state) {
+        return bakedVariant.useAmbientOcclusion(state);
     }
 
     @Override
@@ -158,25 +157,25 @@ public class TransmitterBakedModel implements IBakedModel {
     }
 
     @Override
-    public boolean isSideLit() {
-        return bakedVariant.isSideLit();
+    public boolean usesBlockLight() {
+        return bakedVariant.usesBlockLight();
     }
 
     @Override
-    public boolean isBuiltInRenderer() {
-        return bakedVariant.isBuiltInRenderer();
+    public boolean isCustomRenderer() {
+        return bakedVariant.isCustomRenderer();
     }
 
     @Nonnull
     @Override
     @Deprecated
-    public TextureAtlasSprite getParticleTexture() {
-        return bakedVariant.getParticleTexture();
+    public TextureAtlasSprite getParticleIcon() {
+        return bakedVariant.getParticleIcon();
     }
 
     @Override
-    public TextureAtlasSprite getParticleTexture(@Nonnull IModelData data) {
-        return bakedVariant.getParticleTexture(data);
+    public TextureAtlasSprite getParticleIcon(@Nonnull IModelData data) {
+        return bakedVariant.getParticleIcon(data);
     }
 
     @Override
@@ -185,36 +184,30 @@ public class TransmitterBakedModel implements IBakedModel {
     }
 
     @Override
-    public IBakedModel handlePerspective(TransformType cameraTransformType, MatrixStack mat) {
+    public BakedModel handlePerspective(TransformType cameraTransformType, PoseStack mat) {
         return bakedVariant.handlePerspective(cameraTransformType, mat);
     }
 
     @Nonnull
     @Override
-    public ItemOverrideList getOverrides() {
+    public ItemOverrides getOverrides() {
         return bakedVariant.getOverrides();
     }
 
     @Nonnull
     @Override
-    public IModelData getModelData(@Nonnull IBlockDisplayReader world, @Nonnull BlockPos pos, @Nonnull BlockState state, @Nonnull IModelData tileData) {
+    public IModelData getModelData(@Nonnull BlockAndTintGetter world, @Nonnull BlockPos pos, @Nonnull BlockState state, @Nonnull IModelData tileData) {
         return bakedVariant.getModelData(world, pos, state, tileData);
     }
 
     @Nonnull
     @Override
     @Deprecated
-    public ItemCameraTransforms getItemCameraTransforms() {
-        return bakedVariant.getItemCameraTransforms();
+    public ItemTransforms getTransforms() {
+        return bakedVariant.getTransforms();
     }
 
-    public static class QuickHash {
-
-        private final Object[] objs;
-
-        public QuickHash(Object... objs) {
-            this.objs = objs;
-        }
+    public record QuickHash(Object... objs) {
 
         @Override
         public int hashCode() {
@@ -222,13 +215,9 @@ public class TransmitterBakedModel implements IBakedModel {
             return Arrays.hashCode(objs);
         }
 
-        public Object[] get() {
-            return objs;
-        }
-
         @Override
         public boolean equals(Object obj) {
-            return obj == this || obj instanceof QuickHash && Arrays.deepEquals(objs, ((QuickHash) obj).objs);
+            return obj == this || obj instanceof QuickHash other && Arrays.deepEquals(objs, other.objs);
         }
     }
 }

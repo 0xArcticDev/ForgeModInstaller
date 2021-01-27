@@ -1,9 +1,9 @@
 package mekanism.client.render.tileentity;
 
-import com.google.common.base.Objects;
-import com.mojang.blaze3d.matrix.MatrixStack;
+import com.mojang.blaze3d.vertex.PoseStack;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Random;
 import java.util.UUID;
 import javax.annotation.ParametersAreNonnullByDefault;
@@ -24,11 +24,11 @@ import mekanism.common.tile.multiblock.TileEntitySPSCasing;
 import mekanism.common.util.MekanismUtils;
 import mekanism.common.util.MekanismUtils.ResourceType;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.IRenderTypeBuffer;
-import net.minecraft.client.renderer.tileentity.TileEntityRendererDispatcher;
-import net.minecraft.profiler.IProfiler;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.vector.Vector3d;
+import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
+import net.minecraft.core.BlockPos;
+import net.minecraft.util.profiling.ProfilerFiller;
+import net.minecraft.world.phys.Vec3;
 
 @ParametersAreNonnullByDefault
 public class RenderSPS extends MekanismTileEntityRenderer<TileEntitySPSCasing> {
@@ -44,23 +44,24 @@ public class RenderSPS extends MekanismTileEntityRenderer<TileEntitySPSCasing> {
 
     private final Minecraft minecraft = Minecraft.getInstance();
 
-    public RenderSPS(TileEntityRendererDispatcher renderer) {
-        super(renderer);
+    public RenderSPS(BlockEntityRendererProvider.Context context) {
+        super(context);
         CORE.setColor(Color.rgbai(255, 255, 255, 240));
     }
 
     @Override
-    protected void render(TileEntitySPSCasing tile, float partialTick, MatrixStack matrix, IRenderTypeBuffer renderer, int light, int overlayLight, IProfiler profiler) {
-        if (tile.isMaster) {
+    protected void render(TileEntitySPSCasing tile, float partialTick, PoseStack matrix, MultiBufferSource renderer, int light, int overlayLight, ProfilerFiller profiler) {
+        if (tile.isMaster()) {
             SPSMultiblockData multiblock = tile.getMultiblock();
             if (multiblock.isFormed() && multiblock.renderLocation != null && multiblock.getBounds() != null) {
                 BoltRenderer bolts = boltRendererMap.computeIfAbsent(multiblock.inventoryID, mb -> new BoltRenderer());
-                Vector3d center = Vector3d.copy(multiblock.getMinPos()).add(Vector3d.copy(multiblock.getMaxPos())).add(new Vector3d(1, 1, 1)).scale(0.5);
-                Vector3d renderCenter = center.subtract(tile.getPos().getX(), tile.getPos().getY(), tile.getPos().getZ());
-                if (!minecraft.isGamePaused()) {
+                Vec3 center = Vec3.atLowerCornerOf(multiblock.getMinPos()).add(Vec3.atLowerCornerOf(multiblock.getMaxPos()))
+                      .add(new Vec3(1, 1, 1)).scale(0.5);
+                Vec3 renderCenter = center.subtract(tile.getBlockPos().getX(), tile.getBlockPos().getY(), tile.getBlockPos().getZ());
+                if (!minecraft.isPaused()) {
                     for (CoilData data : multiblock.coilData.coilMap.values()) {
                         if (data.prevLevel > 0) {
-                            bolts.update(data.coilPos.hashCode(), getBoltFromData(data, tile.getPos(), multiblock, renderCenter), partialTick);
+                            bolts.update(data.coilPos.hashCode(), getBoltFromData(data, tile.getBlockPos(), multiblock, renderCenter), partialTick);
                         }
                     }
                 }
@@ -68,16 +69,16 @@ public class RenderSPS extends MekanismTileEntityRenderer<TileEntitySPSCasing> {
                 float energyScale = getEnergyScale(multiblock.lastProcessed);
                 int targetEffectCount = 0;
 
-                if (!minecraft.isGamePaused() && !multiblock.lastReceivedEnergy.isZero()) {
+                if (!minecraft.isPaused() && !multiblock.lastReceivedEnergy.isZero()) {
                     if (rand.nextDouble() < getBoundedScale(energyScale, 0.01F, 0.4F)) {
                         CuboidSide side = CuboidSide.SIDES[rand.nextInt(6)];
                         Plane plane = Plane.getInnerCuboidPlane(multiblock.getBounds(), side);
-                        Vector3d endPos = plane.getRandomPoint(rand).subtract(tile.getPos().getX(), tile.getPos().getY(), tile.getPos().getZ());
+                        Vec3 endPos = plane.getRandomPoint(rand).subtract(tile.getBlockPos().getX(), tile.getBlockPos().getY(), tile.getBlockPos().getZ());
                         BoltEffect bolt = new BoltEffect(BoltRenderInfo.ELECTRICITY, renderCenter, endPos, 15)
                               .size(0.01F * getBoundedScale(energyScale, 0.5F, 5))
                               .lifespan(8)
                               .spawn(SpawnFunction.NO_DELAY);
-                        bolts.update(Objects.hashCode(side.hashCode(), endPos.hashCode()), bolt, partialTick);
+                        bolts.update(Objects.hash(side, endPos), bolt, partialTick);
                     }
                     targetEffectCount = (int) getBoundedScale(energyScale, 10, 120);
                 }
@@ -93,10 +94,10 @@ public class RenderSPS extends MekanismTileEntityRenderer<TileEntitySPSCasing> {
                 if (multiblock.lastProcessed > 0) {
                     CORE.setPos(center);
                     CORE.setScale(getBoundedScale(energyScale, MIN_SCALE, MAX_SCALE));
-                    BillboardingEffectRenderer.render(CORE, tile.getPos(), matrix, renderer, tile.getWorld().getGameTime(), partialTick);
+                    BillboardingEffectRenderer.render(CORE, tile.getBlockPos(), matrix, renderer, tile.getLevel().getGameTime(), partialTick);
                 }
 
-                tile.orbitEffects.forEach(effect -> BillboardingEffectRenderer.render(effect, tile.getPos(), matrix, renderer, tile.getWorld().getGameTime(), partialTick));
+                tile.orbitEffects.forEach(effect -> BillboardingEffectRenderer.render(effect, tile.getBlockPos(), matrix, renderer, tile.getLevel().getGameTime(), partialTick));
             }
         }
     }
@@ -109,9 +110,9 @@ public class RenderSPS extends MekanismTileEntityRenderer<TileEntitySPSCasing> {
         return min + scale * (max - min);
     }
 
-    private static BoltEffect getBoltFromData(CoilData data, BlockPos pos, SPSMultiblockData multiblock, Vector3d center) {
-        Vector3d start = Vector3d.copyCentered(data.coilPos.offset(data.side));
-        start = start.add(Vector3d.copy(data.side.getDirectionVec()).scale(0.5));
+    private static BoltEffect getBoltFromData(CoilData data, BlockPos pos, SPSMultiblockData multiblock, Vec3 center) {
+        Vec3 start = Vec3.atCenterOf(data.coilPos.relative(data.side));
+        start = start.add(Vec3.atLowerCornerOf(data.side.getNormal()).scale(0.5));
         int count = 1 + (data.prevLevel - 1) / 2;
         float size = 0.01F * data.prevLevel;
         return new BoltEffect(BoltRenderInfo.ELECTRICITY, start.subtract(pos.getX(), pos.getY(), pos.getZ()), center, 15)
@@ -124,8 +125,8 @@ public class RenderSPS extends MekanismTileEntityRenderer<TileEntitySPSCasing> {
     }
 
     @Override
-    public boolean isGlobalRenderer(TileEntitySPSCasing tile) {
-        if (tile.isMaster) {
+    public boolean shouldRenderOffScreen(TileEntitySPSCasing tile) {
+        if (tile.isMaster()) {
             SPSMultiblockData multiblock = tile.getMultiblock();
             return multiblock.isFormed() && multiblock.renderLocation != null;
         }

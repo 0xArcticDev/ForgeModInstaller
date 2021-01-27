@@ -6,16 +6,17 @@ import java.util.function.Predicate;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
-import mcp.MethodsReturnNonnullByDefault;
 import mekanism.api.Action;
+import mekanism.api.AutomationType;
 import mekanism.api.IContentsListener;
 import mekanism.api.NBTConstants;
 import mekanism.api.annotations.FieldsAreNonnullByDefault;
 import mekanism.api.annotations.NonNull;
 import mekanism.api.fluid.IExtendedFluidTank;
-import mekanism.api.inventory.AutomationType;
 import mekanism.common.util.NBTUtils;
-import net.minecraft.nbt.CompoundNBT;
+import mekanism.common.util.RegistryUtils;
+import net.minecraft.MethodsReturnNonnullByDefault;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraftforge.fluids.FluidStack;
 
 @FieldsAreNonnullByDefault
@@ -55,6 +56,15 @@ public class BasicFluidTank implements IExtendedFluidTank {
         }
         Objects.requireNonNull(validator, "Fluid validity check cannot be null");
         return new BasicFluidTank(capacity, notExternal, alwaysTrueBi, validator, listener);
+    }
+
+    public static BasicFluidTank input(int capacity, Predicate<@NonNull FluidStack> canInsert, Predicate<@NonNull FluidStack> validator, @Nullable IContentsListener listener) {
+        if (capacity < 0) {
+            throw new IllegalArgumentException("Capacity must be at least zero");
+        }
+        Objects.requireNonNull(canInsert, "Insertion validity check cannot be null");
+        Objects.requireNonNull(validator, "Fluid validity check cannot be null");
+        return new BasicFluidTank(capacity, notExternal, (stack, automationType) -> canInsert.test(stack), validator, listener);
     }
 
     public static BasicFluidTank output(int capacity, @Nullable IContentsListener listener) {
@@ -120,6 +130,7 @@ public class BasicFluidTank implements IExtendedFluidTank {
         }
     }
 
+    @Nonnull
     @Override
     public FluidStack getFluid() {
         return stored;
@@ -137,7 +148,7 @@ public class BasicFluidTank implements IExtendedFluidTank {
      *
      * @return The rate this tank can insert/extract at.
      *
-     * @implNote By default this returns {@link Integer#MAX_VALUE} so as to not actually limit the tank's rate. By default this is also ignored for direct setting of the
+     * @implNote By default, this returns {@link Integer#MAX_VALUE} to not actually limit the tank's rate. By default, this is also ignored for direct setting of the
      * stack/stack size
      */
     protected int getRate(@Nullable AutomationType automationType) {
@@ -145,14 +156,15 @@ public class BasicFluidTank implements IExtendedFluidTank {
         return Integer.MAX_VALUE;
     }
 
-    protected void setStackUnchecked(FluidStack stack) {
+    @Override
+    public void setStackUnchecked(FluidStack stack) {
         setStack(stack, false);
     }
 
     private void setStack(FluidStack stack, boolean validateStack) {
         if (stack.isEmpty()) {
             if (stored.isEmpty()) {
-                //If we are already empty just exit, so as to not fire onContentsChanged
+                //If we are already empty just exit, to not fire onContentsChanged
                 return;
             }
             stored = FluidStack.EMPTY;
@@ -161,7 +173,7 @@ public class BasicFluidTank implements IExtendedFluidTank {
         } else {
             //Throws a RuntimeException as specified is allowed when something unexpected happens
             // As setStack is more meant to be used as an internal method
-            throw new RuntimeException("Invalid fluid for tank: " + stack.getFluid().getRegistryName() + " " + stack.getAmount());
+            throw new RuntimeException("Invalid fluid for tank: " + RegistryUtils.getName(stack.getFluid()) + " " + stack.getAmount());
         }
         onContentsChanged();
     }
@@ -169,7 +181,7 @@ public class BasicFluidTank implements IExtendedFluidTank {
     @Override
     public FluidStack insert(@Nonnull FluidStack stack, Action action, AutomationType automationType) {
         if (stack.isEmpty() || !isFluidValid(stack) || !canInsert.test(stack, automationType)) {
-            //"Fail quick" if the given stack is empty or we can never insert the fluid or currently are unable to insert it
+            //"Fail quick" if the given stack is empty, or we can never insert the fluid or currently are unable to insert it
             return stack;
         }
         int needed = Math.min(getRate(automationType), getNeeded());
@@ -202,7 +214,7 @@ public class BasicFluidTank implements IExtendedFluidTank {
     @Override
     public FluidStack extract(int amount, Action action, AutomationType automationType) {
         if (isEmpty() || amount < 1 || !canExtract.test(stored, automationType)) {
-            //"Fail quick" if we don't can never extract from this tank, have an fluid stored, or the amount being requested is less than one
+            //"Fail quick" if we don't can never extract from this tank, have a fluid stored, or the amount being requested is less than one
             return FluidStack.EMPTY;
         }
         //Note: While we technically could just return the stack itself if we are removing all that we have, it would require a lot more checks
@@ -246,7 +258,7 @@ public class BasicFluidTank implements IExtendedFluidTank {
             amount = maxStackSize;
         }
         if (getFluidAmount() == amount || action.simulate()) {
-            //If our size is not changing or we are only simulating the change, don't do anything
+            //If our size is not changing, or we are only simulating the change, don't do anything
             return amount;
         }
         stored.setAmount(amount);
@@ -313,16 +325,16 @@ public class BasicFluidTank implements IExtendedFluidTank {
      * @implNote Overwritten so that if we decide to change to returning a cached/copy of our stack in {@link #getFluid()}, we can optimize out the copying.
      */
     @Override
-    public CompoundNBT serializeNBT() {
-        CompoundNBT nbt = new CompoundNBT();
+    public CompoundTag serializeNBT() {
+        CompoundTag nbt = new CompoundTag();
         if (!isEmpty()) {
-            nbt.put(NBTConstants.STORED, stored.writeToNBT(new CompoundNBT()));
+            nbt.put(NBTConstants.STORED, stored.writeToNBT(new CompoundTag()));
         }
         return nbt;
     }
 
     @Override
-    public void deserializeNBT(CompoundNBT nbt) {
+    public void deserializeNBT(CompoundTag nbt) {
         NBTUtils.setFluidStackIfPresent(nbt, NBTConstants.STORED, this::setStackUnchecked);
     }
 }

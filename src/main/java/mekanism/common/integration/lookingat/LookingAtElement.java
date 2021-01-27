@@ -1,14 +1,15 @@
 package mekanism.common.integration.lookingat;
 
-import com.mojang.blaze3d.matrix.MatrixStack;
+import com.mojang.blaze3d.vertex.PoseStack;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import mekanism.client.gui.GuiUtils;
+import mekanism.client.gui.GuiUtils.TilingDirection;
 import mekanism.client.render.MekanismRenderer;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.AbstractGui;
+import net.minecraft.client.gui.GuiComponent;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
-import net.minecraft.util.text.ITextComponent;
+import net.minecraft.network.chat.Component;
 
 public abstract class LookingAtElement {
 
@@ -20,25 +21,26 @@ public abstract class LookingAtElement {
         this.textColor = textColor;
     }
 
-    public void render(@Nonnull MatrixStack matrix, int x, int y) {
+    public void render(@Nonnull PoseStack matrix, int x, int y) {
         int width = getWidth();
         int height = getHeight();
-        AbstractGui.fill(matrix, x, y, x + width - 1, y + 1, borderColor);
-        AbstractGui.fill(matrix, x, y, x + 1, y + height - 1, borderColor);
-        AbstractGui.fill(matrix, x + width - 1, y, x + width, y + height - 1, borderColor);
-        AbstractGui.fill(matrix, x, y + height - 1, x + width, y + height, borderColor);
+        GuiComponent.fill(matrix, x, y, x + width - 1, y + 1, borderColor);
+        GuiComponent.fill(matrix, x, y, x + 1, y + height - 1, borderColor);
+        GuiComponent.fill(matrix, x + width - 1, y, x + width, y + height - 1, borderColor);
+        GuiComponent.fill(matrix, x, y + height - 1, x + width, y + height, borderColor);
         TextureAtlasSprite icon = getIcon();
         if (icon != null) {
             int scale = getScaledLevel(width - 2);
             if (scale > 0) {
                 boolean colored = applyRenderColor();
-                GuiUtils.drawTiledSprite(matrix, x + 1, y + 1, height - 2, scale, height - 2, icon, 16, 16, 0);
+                GuiUtils.drawTiledSprite(matrix, x + 1, y + 1, height - 2, scale, height - 2, icon,
+                      16, 16, 0, TilingDirection.DOWN_RIGHT);
                 if (colored) {
                     MekanismRenderer.resetColor();
                 }
             }
         }
-        renderScaledText(Minecraft.getInstance(), matrix, x + 4, y + 3, textColor, getWidth() - 8, getText());
+        renderScaledText(Minecraft.getInstance(), matrix, x + 4, y + 3, textColor, width - 8, getText());
     }
 
     public int getWidth() {
@@ -54,24 +56,24 @@ public abstract class LookingAtElement {
     @Nullable
     public abstract TextureAtlasSprite getIcon();
 
-    public abstract ITextComponent getText();
+    public abstract Component getText();
 
     protected boolean applyRenderColor() {
         return false;
     }
 
-    public static void renderScaledText(Minecraft mc, @Nonnull MatrixStack matrix, int x, int y, int color, int maxWidth, ITextComponent component) {
-        int length = mc.fontRenderer.getStringPropertyWidth(component);
+    public static void renderScaledText(Minecraft mc, @Nonnull PoseStack matrix, float x, float y, int color, float maxWidth, Component component) {
+        int length = mc.font.width(component);
         if (length <= maxWidth) {
-            mc.fontRenderer.func_243248_b(matrix, component, x, y, color);
+            mc.font.draw(matrix, component, x, y, color);
         } else {
-            float scale = (float) maxWidth / length;
+            float scale = maxWidth / length;
             float reverse = 1 / scale;
             float yAdd = 4 - (scale * 8) / 2F;
-            matrix.push();
+            matrix.pushPose();
             matrix.scale(scale, scale, scale);
-            mc.fontRenderer.func_243248_b(matrix, component, (int) (x * reverse), (int) ((y * reverse) + yAdd), color);
-            matrix.pop();
+            mc.font.draw(matrix, component, (int) (x * reverse), (int) ((y * reverse) + yAdd), color);
+            matrix.popPose();
         }
         //Make sure the color does not leak from having drawn the string
         MekanismRenderer.resetColor();

@@ -1,5 +1,6 @@
 package mekanism.common.tile.qio;
 
+import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 import it.unimi.dsi.fastutil.objects.Object2LongMap;
 import it.unimi.dsi.fastutil.objects.Object2LongOpenHashMap;
@@ -10,26 +11,32 @@ import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.ToIntFunction;
 import mekanism.api.NBTConstants;
+import mekanism.api.math.MathUtils;
 import mekanism.common.Mekanism;
 import mekanism.common.content.qio.QIOFrequency;
 import mekanism.common.content.qio.QIOFrequency.QIOItemTypeData;
 import mekanism.common.content.qio.filter.QIOFilter;
 import mekanism.common.content.qio.filter.QIOItemStackFilter;
+import mekanism.common.content.qio.filter.QIOModIDFilter;
 import mekanism.common.content.qio.filter.QIOTagFilter;
 import mekanism.common.content.transporter.TransporterManager;
+import mekanism.common.integration.computer.ComputerException;
+import mekanism.common.integration.computer.annotation.ComputerMethod;
 import mekanism.common.inventory.container.MekanismContainer;
 import mekanism.common.inventory.container.sync.SyncableBoolean;
 import mekanism.common.lib.inventory.HashedItem;
 import mekanism.common.registries.MekanismBlocks;
 import mekanism.common.util.CapabilityUtils;
 import mekanism.common.util.InventoryUtils;
-import mekanism.common.util.ItemDataUtils;
 import mekanism.common.util.MekanismUtils;
 import mekanism.common.util.NBTUtils;
 import mekanism.common.util.WorldUtils;
-import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.CompoundNBT;
-import net.minecraft.tileentity.TileEntity;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraftforge.items.CapabilityItemHandler;
 import net.minecraftforge.items.IItemHandler;
 
@@ -40,12 +47,12 @@ public class TileEntityQIOExporter extends TileEntityQIOFilterHandler {
     private boolean exportWithoutFilter;
 
     private final EfficientEjector<Object2LongMap.Entry<HashedItem>> filterEjector =
-          new EfficientEjector<>(Entry::getKey, e -> (int) Math.min(Integer.MAX_VALUE, e.getLongValue()));
+          new EfficientEjector<>(Entry::getKey, e -> MathUtils.clampToInt(e.getLongValue()));
     private final EfficientEjector<Map.Entry<HashedItem, QIOItemTypeData>> filterlessEjector =
-          new EfficientEjector<>(Entry::getKey, e -> (int) Math.min(Integer.MAX_VALUE, e.getValue().getCount()));
+          new EfficientEjector<>(Entry::getKey, e -> MathUtils.clampToInt(e.getValue().getCount()));
 
-    public TileEntityQIOExporter() {
-        super(MekanismBlocks.QIO_EXPORTER);
+    public TileEntityQIOExporter(BlockPos pos, BlockState state) {
+        super(MekanismBlocks.QIO_EXPORTER, pos, state);
     }
 
     @Override
@@ -59,17 +66,13 @@ public class TileEntityQIOExporter extends TileEntityQIOFilterHandler {
             tryEject();
             delay = MAX_DELAY;
         }
-
-        if (world.getGameTime() % 10 == 0) {
-            QIOFrequency frequency = getQIOFrequency();
-            setActive(frequency != null);
-        }
     }
 
     private void tryEject() {
         QIOFrequency freq = getQIOFrequency();
-        TileEntity back = WorldUtils.getTileEntity(getWorld(), pos.offset(getOppositeDirection()));
-        if (freq == null || !InventoryUtils.isItemHandler(back, getDirection())) {
+        Direction direction = getDirection();
+        BlockEntity back = WorldUtils.getTileEntity(getLevel(), worldPosition.relative(direction.getOpposite()));
+        if (freq == null || !InventoryUtils.isItemHandler(back, direction)) {
             return;
         }
         if (!exportWithoutFilter && getFilters().isEmpty()) {
@@ -82,27 +85,35 @@ public class TileEntityQIOExporter extends TileEntityQIOFilterHandler {
         }
     }
 
-    private Object2LongMap<HashedItem> getFilterEjectMap(TileEntity back, QIOFrequency freq) {
+    private Object2LongMap<HashedItem> getFilterEjectMap(BlockEntity back, QIOFrequency freq) {
         Object2LongMap<HashedItem> map = new Object2LongOpenHashMap<>();
         for (QIOFilter<?> filter : getFilters()) {
-            if (filter instanceof QIOItemStackFilter) {
-                HashedItem type = HashedItem.create(((QIOItemStackFilter) filter).getItemStack());
-                map.put(type, freq.getStored(type));
-            } else if (filter instanceof QIOTagFilter) {
-                String tagName = ((QIOTagFilter) filter).getTagName();
-                map.putAll(freq.getStacksByWildcard(tagName));
+            if (filter instanceof QIOItemStackFilter itemFilter) {
+                if (itemFilter.fuzzyMode) {
+                    map.putAll(freq.getStacksByItem(itemFilter.getItemStack().getItem()));
+                } else {
+                    HashedItem type = HashedItem.create(itemFilter.getItemStack());
+                    map.put(type, freq.getStored(type));
+                }
+            } else if (filter instanceof QIOTagFilter tagFilter) {
+                String tagName = tagFilter.getTagName();
+                map.putAll(freq.getStacksByTagWildcard(tagName));
+            } else if (filter instanceof QIOModIDFilter modIDFilter) {
+                String modID = modIDFilter.getModID();
+                map.putAll(freq.getStacksByModIDWildcard(modID));
             }
         }
         return map;
     }
 
+    @ComputerMethod
     public boolean getExportWithoutFilter() {
         return exportWithoutFilter;
     }
 
     public void toggleExportWithoutFilter() {
         exportWithoutFilter = !exportWithoutFilter;
-        markDirty(false);
+        markForSave();
     }
 
     @Override
@@ -112,15 +123,15 @@ public class TileEntityQIOExporter extends TileEntityQIOFilterHandler {
     }
 
     @Override
-    public void writeSustainedData(ItemStack itemStack) {
-        super.writeSustainedData(itemStack);
-        ItemDataUtils.setBoolean(itemStack, NBTConstants.AUTO, exportWithoutFilter);
+    public void writeSustainedData(CompoundTag dataMap) {
+        super.writeSustainedData(dataMap);
+        dataMap.putBoolean(NBTConstants.AUTO, exportWithoutFilter);
     }
 
     @Override
-    public void readSustainedData(ItemStack itemStack) {
-        super.readSustainedData(itemStack);
-        exportWithoutFilter = ItemDataUtils.getBoolean(itemStack, NBTConstants.AUTO);
+    public void readSustainedData(CompoundTag dataMap) {
+        super.readSustainedData(dataMap);
+        NBTUtils.setBooleanIfPresent(dataMap, NBTConstants.AUTO, value -> exportWithoutFilter = value);
     }
 
     @Override
@@ -130,18 +141,15 @@ public class TileEntityQIOExporter extends TileEntityQIOFilterHandler {
         return remap;
     }
 
-    @Override
-    public CompoundNBT getConfigurationData(CompoundNBT nbtTags) {
-        super.getConfigurationData(nbtTags);
-        nbtTags.putBoolean(NBTConstants.AUTO, exportWithoutFilter);
-        return nbtTags;
+    //Methods relating to IComputerTile
+    @ComputerMethod
+    private void setExportsWithoutFilter(boolean value) throws ComputerException {
+        validateSecurityIsPublic();
+        if (exportWithoutFilter != value) {
+            toggleExportWithoutFilter();
+        }
     }
-
-    @Override
-    public void setConfigurationData(CompoundNBT nbtTags) {
-        super.setConfigurationData(nbtTags);
-        NBTUtils.setBooleanIfPresent(nbtTags, NBTConstants.AUTO, value -> exportWithoutFilter = value);
-    }
+    //End methods IComputerTile
 
     /**
      * An efficient way to handle large (in item type) item ejections from a QIO frequency. Each eject attempt of a certain item type will use a uniform probability
@@ -149,7 +157,7 @@ public class TileEntityQIOExporter extends TileEntityQIOFilterHandler {
      * type, but not attempt every item in the frequency each operation.
      *
      * Abstracting us away from the item map (using the type/count suppliers) allows us to interface directly with the entries of the QIO's item data map when running a
-     * filterless ejection, rather then recreating the whole map each ejection operation.
+     * filterless ejection, rather than recreating the whole map each ejection operation.
      *
      * Complexity: O(k * s), where 'k' is our max eject attempts constant and 's' is the size of the inventory.
      *
@@ -167,13 +175,13 @@ public class TileEntityQIOExporter extends TileEntityQIOFilterHandler {
             this.countSupplier = countSupplier;
         }
 
-        private void eject(QIOFrequency freq, TileEntity tile, Collection<T> ejectMap) {
+        private void eject(QIOFrequency freq, BlockEntity tile, Collection<T> ejectMap) {
             if (ejectMap.isEmpty()) {
                 return;
             }
             double ejectChance = Math.min(1, (double) MAX_EJECT_ATTEMPTS / ejectMap.size());
             int maxTypes = getMaxTransitTypes(), maxCount = getMaxTransitCount();
-            Map<HashedItem, Integer> removed = new Object2IntOpenHashMap<>();
+            Object2IntMap<HashedItem> removed = new Object2IntOpenHashMap<>();
             int amountRemoved = 0;
 
             Optional<IItemHandler> capability = CapabilityUtils.getCapability(tile, CapabilityItemHandler.ITEM_HANDLER_CAPABILITY, getDirection()).resolve();
@@ -186,7 +194,7 @@ public class TileEntityQIOExporter extends TileEntityQIOFilterHandler {
                         break;
                     }
                     // skip randomly based on our eject chance
-                    if (getWorld().getRandom().nextDouble() > ejectChance) {
+                    if (getLevel().getRandom().nextDouble() > ejectChance) {
                         continue;
                     }
                     HashedItem type = typeSupplier.apply(obj);
@@ -211,10 +219,11 @@ public class TileEntityQIOExporter extends TileEntityQIOFilterHandler {
                 }
             }
             // actually remove the items from the QIO frequency
-            for (Map.Entry<HashedItem, Integer> entry : removed.entrySet()) {
-                ItemStack ret = freq.removeByType(entry.getKey(), entry.getValue());
-                if (ret.getCount() != entry.getValue()) {
-                    Mekanism.logger.error("QIO ejection item removal didn't line up with prediction: removed {}, expected {}", ret.getCount(), entry.getValue());
+            for (Object2IntMap.Entry<HashedItem> entry : removed.object2IntEntrySet()) {
+                int amount = entry.getIntValue();
+                ItemStack ret = freq.removeByType(entry.getKey(), amount);
+                if (ret.getCount() != amount) {
+                    Mekanism.logger.error("QIO ejection item removal didn't line up with prediction: removed {}, expected {}", ret.getCount(), amount);
                 }
             }
         }

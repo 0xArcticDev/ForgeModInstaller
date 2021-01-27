@@ -12,11 +12,11 @@ import mekanism.common.util.MekanismUtils.ResourceType;
 import mekanism.generators.client.gui.element.GuiFissionReactorTab.FissionReactorTab;
 import mekanism.generators.common.GeneratorsLang;
 import mekanism.generators.common.MekanismGenerators;
-import mekanism.generators.common.network.PacketGeneratorsGuiButtonPress;
-import mekanism.generators.common.network.PacketGeneratorsGuiButtonPress.ClickedGeneratorsTileButton;
+import mekanism.generators.common.network.to_server.PacketGeneratorsGuiButtonPress;
+import mekanism.generators.common.network.to_server.PacketGeneratorsGuiButtonPress.ClickedGeneratorsTileButton;
 import mekanism.generators.common.tile.fission.TileEntityFissionReactorCasing;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.text.ITextComponent;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 
 public class GuiFissionReactorTab extends GuiTabElementType<TileEntityFissionReactorCasing, FissionReactorTab> {
 
@@ -47,11 +47,11 @@ public class GuiFissionReactorTab extends GuiTabElementType<TileEntityFissionRea
 
         @Override
         public void onClick(TileEntityFissionReactorCasing tile) {
-            MekanismGenerators.packetHandler.sendToServer(new PacketGeneratorsGuiButtonPress(button, tile.getPos()));
+            MekanismGenerators.packetHandler().sendToServer(new PacketGeneratorsGuiButtonPress(button, tile.getBlockPos()));
         }
 
         @Override
-        public ITextComponent getDescription() {
+        public Component getDescription() {
             return description.translate();
         }
 

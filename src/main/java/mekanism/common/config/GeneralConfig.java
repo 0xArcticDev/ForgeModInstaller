@@ -1,21 +1,21 @@
 package mekanism.common.config;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import mekanism.api.math.FloatingLong;
 import mekanism.common.config.value.CachedBooleanValue;
 import mekanism.common.config.value.CachedConfigValue;
 import mekanism.common.config.value.CachedDoubleValue;
-import mekanism.common.config.value.CachedEnumValue;
 import mekanism.common.config.value.CachedFloatValue;
 import mekanism.common.config.value.CachedFloatingLongValue;
 import mekanism.common.config.value.CachedIntValue;
 import mekanism.common.config.value.CachedLongValue;
+import mekanism.common.config.value.CachedOredictionificatorConfigValue;
 import mekanism.common.tier.ChemicalTankTier;
 import mekanism.common.tier.EnergyCubeTier;
 import mekanism.common.tier.FluidTankTier;
-import mekanism.common.util.UnitDisplayUtils.EnergyType;
-import mekanism.common.util.UnitDisplayUtils.TempType;
+import mekanism.common.util.UnitDisplayUtils.EnergyConversionRate;
 import net.minecraftforge.common.ForgeConfigSpec;
 import net.minecraftforge.fml.config.ModConfig.Type;
 
@@ -25,7 +25,9 @@ public class GeneralConfig extends BaseMekanismConfig {
 
     private static final String EJECT_CATEGORY = "auto_eject";
     private static final String MINER_CATEGORY = "digital_miner";
+    private static final String DYNAMIC_TANK = "dynamic_tank";
     private static final String LASER_SETTINGS = "laser";
+    private static final String OREDICTIONIFICATOR_CATEGORY = "oredictionificator";
     private static final String PUMP_CATEGORY = "pump";
     private static final String ENTANGLOPORTER_CATEGORY = "quantum_entangloporter";
     private static final String SECURITY_CATEGORY = "security";
@@ -39,19 +41,24 @@ public class GeneralConfig extends BaseMekanismConfig {
 
     public final CachedBooleanValue logPackets;
     public final CachedBooleanValue allowChunkloading;
+    public final CachedBooleanValue easyMinerFilters;
     public final CachedIntValue blockDeactivationDelay;
     public final CachedConfigValue<List<String>> cardboardModBlacklist;
     public final CachedBooleanValue transmitterAlloyUpgrade;
     public final CachedIntValue maxUpgradeMultiplier;
     public final CachedDoubleValue boilerWaterConductivity;
     public final CachedDoubleValue heatPerFuelTick;
+    public final CachedIntValue fuelwoodTickMultiplier;
     public final CachedDoubleValue resistiveHeaterEfficiency;
     public final CachedDoubleValue superheatingHeatTransfer;
-    public final CachedEnumValue<TempType> tempUnit;
     public final CachedIntValue maxSolarNeutronActivatorRate;
     //Auto eject
     public final CachedIntValue fluidAutoEjectRate;
     public final CachedLongValue chemicalAutoEjectRate;
+    public final CachedDoubleValue dumpExcessKeepRatio;
+    //Dynamic Tank
+    public final CachedIntValue dynamicTankFluidPerTank;
+    public final CachedLongValue dynamicTankChemicalPerTank;
     //Prefilled
     public final CachedBooleanValue prefilledFluidTanks;
     public final CachedBooleanValue prefilledGasTanks;
@@ -60,16 +67,13 @@ public class GeneralConfig extends BaseMekanismConfig {
     public final CachedBooleanValue prefilledSlurryTanks;
     //Energy Conversion
     public final CachedBooleanValue blacklistIC2;
-    public final CachedFloatingLongValue FROM_IC2;
-    public final CachedFloatingLongValue TO_IC2;
+    public final EnergyConversionRate IC2_CONVERSION_RATE;
     public final CachedBooleanValue blacklistForge;
-    public final CachedFloatingLongValue FROM_FORGE;
-    public final CachedFloatingLongValue TO_FORGE;
+    public final EnergyConversionRate FORGE_CONVERSION_RATE;
     public final CachedBooleanValue blacklistFluxNetworks;
     public final CachedFloatingLongValue FROM_H2;
     public final CachedIntValue ETHENE_BURN_TIME;
     public final CachedFloatingLongValue maxEnergyPerSteam;
-    public final CachedEnumValue<EnergyType> energyUnit;
     //Radiation
     public final CachedBooleanValue radiationEnabled;
     public final CachedIntValue radiationChunkCheckRadius;
@@ -88,6 +92,8 @@ public class GeneralConfig extends BaseMekanismConfig {
     public final CachedIntValue laserRange;
     public final CachedFloatingLongValue laserEnergyNeededPerHardness;
     public final CachedFloatingLongValue laserEnergyPerDamage;
+    //Oredictionificator
+    public final CachedOredictionificatorConfigValue validOredictionificatorFilters;
     //Pump
     public final CachedIntValue maxPumpRange;
     public final CachedBooleanValue pumpWaterSources;
@@ -119,6 +125,8 @@ public class GeneralConfig extends BaseMekanismConfig {
               .define("logPackets", false));
         allowChunkloading = CachedBooleanValue.wrap(this, builder.comment("Disable to make the anchor upgrade not do anything.")
               .define("allowChunkloading", true));
+        easyMinerFilters = CachedBooleanValue.wrap(this, builder.comment("Enable this to allow dragging items from JEI into the target slot of Digital Miner filters.")
+              .define("easyMinerFilters", false));
         blockDeactivationDelay = CachedIntValue.wrap(this, builder.comment("How many ticks must pass until a block's active state is synced with the client, if it has been rapidly changing.")
               .define("blockDeactivationDelay", 60));
         cardboardModBlacklist = CachedConfigValue.wrap(this, builder.comment("Any mod ids added to this list will not be able to have any of their blocks, picked up by the cardboard box. For example: [\"mekanism\"]")
@@ -132,20 +140,30 @@ public class GeneralConfig extends BaseMekanismConfig {
               .define("boilerWaterConductivity", 0.7));
         heatPerFuelTick = CachedDoubleValue.wrap(this, builder.comment("Amount of heat produced per fuel tick of a fuel's burn time in the Fuelwood Heater.")
               .define("heatPerFuelTick", 400D));
+        fuelwoodTickMultiplier = CachedIntValue.wrap(this, builder.comment("Number of ticks to burn an item at in a Fuelwood Heater. Use this config option to effectively make Fuelwood Heater's burn faster but produce the same amount of heat per item.")
+              .defineInRange("fuelwoodTickMultiplier", 1, 1, 1_000));
         resistiveHeaterEfficiency = CachedDoubleValue.wrap(this, builder.comment("How much heat energy is created from one Joule of regular energy in the Resistive Heater.")
               .defineInRange("resistiveHeaterEfficiency", 0.6, 0, 1));
         superheatingHeatTransfer = CachedDoubleValue.wrap(this, builder.comment("Amount of heat each Boiler heating element produces.")
               .define("superheatingHeatTransfer", 16_000_000D));
-        tempUnit = CachedEnumValue.wrap(this, builder.comment("Displayed temperature unit in Mekanism GUIs.")
-              .defineEnum("temperatureUnit", TempType.K));
         maxSolarNeutronActivatorRate = CachedIntValue.wrap(this, builder.comment("Peak processing rate for the Solar Neutron Activator. Note: It can go higher than this value in some extreme environments.")
               .define("maxSolarNeutronActivatorRate", 64));
+
+        builder.comment("Dynamic Tank Settings").push(DYNAMIC_TANK);
+        int maxVolume = 18 * 18 * 18;
+        dynamicTankFluidPerTank = CachedIntValue.wrap(this, builder.comment("Amount of fluid (mB) that each block of the dynamic tank contributes to the volume. Max = volume * fluidPerTank")
+              .defineInRange("fluidPerTank", 350_000, 1, Integer.MAX_VALUE / maxVolume));
+        dynamicTankChemicalPerTank = CachedLongValue.wrap(this, builder.comment("Amount of chemical (mB) that each block of the dynamic tank contributes to the volume. Max = volume * chemicalPerTank")
+              .defineInRange("chemicalPerTank", 16_000_000, 1, Long.MAX_VALUE / maxVolume));
+        builder.pop();
 
         builder.comment("Auto Eject Settings").push(EJECT_CATEGORY);
         fluidAutoEjectRate = CachedIntValue.wrap(this, builder.comment("Rate at which fluid gets auto ejected from tiles.")
               .define("fluid", 1_024));
         chemicalAutoEjectRate = CachedLongValue.wrap(this, builder.comment("Rate at which chemicals gets auto ejected from tiles.")
               .defineInRange("chemical", 1_024L, 1, Long.MAX_VALUE));
+        dumpExcessKeepRatio = CachedDoubleValue.wrap(this, builder.comment("The percentage of a tank's capacity to leave contents in when set to dumping excess.")
+              .defineInRange("dumpExcessKeepRatio", 0.9D, 0.001D, 1D));
         builder.pop();
 
         builder.comment("Prefilled Tanks").push(PREFILLED_CATEGORY);
@@ -165,28 +183,30 @@ public class GeneralConfig extends BaseMekanismConfig {
         blacklistIC2 = CachedBooleanValue.wrap(this, builder.comment("Disables IC2 power integration. Requires world restart (server-side option in SMP).")
               .worldRestart()
               .define("blacklistIC2", false));
-        FROM_IC2 = CachedFloatingLongValue.define(this, builder, "Conversion multiplier from EU to Joules (EU * JoulePerEU = Joules)",
-              "JoulePerEU", FloatingLong.createConst(10), CachedFloatingLongValue.POSITIVE);
-        TO_IC2 = CachedFloatingLongValue.define(this, builder, "Conversion multiplier from Joules to EU (Joules * EUPerJoule = EU)",
-              "EUPerJoule", FloatingLong.createConst(0.1), CachedFloatingLongValue.POSITIVE);
+        IC2_CONVERSION_RATE = new EnergyConversionRate(
+              CachedFloatingLongValue.define(this, builder, "Conversion multiplier from EU to Joules (EU * JoulePerEU = Joules)",
+                    "JoulePerEU", FloatingLong.createConst(10), CachedFloatingLongValue.POSITIVE),
+              CachedFloatingLongValue.define(this, builder, "Conversion multiplier from Joules to EU (Joules * EUPerJoule = EU)",
+                    "EUPerJoule", FloatingLong.createConst(0.1), CachedFloatingLongValue.POSITIVE)
+        );
         blacklistForge = CachedBooleanValue.wrap(this, builder.comment("Disables Forge Energy (FE,RF,IF,uF,CF) power integration. Requires world restart (server-side option in SMP).")
               .worldRestart()
               .define("blacklistForge", false));
-        FROM_FORGE = CachedFloatingLongValue.define(this, builder, "Conversion multiplier from Forge Energy to Joules (FE * JoulePerForgeEnergy = Joules)",
-              "JoulePerForgeEnergy", FloatingLong.createConst(2.5), CachedFloatingLongValue.POSITIVE);
-        TO_FORGE = CachedFloatingLongValue.define(this, builder, "Conversion multiplier from Joules to Forge Energy (Joules * ForgeEnergyPerJoule = FE)",
-              "ForgeEnergyPerJoule", FloatingLong.createConst(0.4), CachedFloatingLongValue.POSITIVE);
+        FORGE_CONVERSION_RATE = new EnergyConversionRate(
+              CachedFloatingLongValue.define(this, builder, "Conversion multiplier from Forge Energy to Joules (FE * JoulePerForgeEnergy = Joules)",
+                    "JoulePerForgeEnergy", FloatingLong.createConst(2.5), CachedFloatingLongValue.POSITIVE),
+              CachedFloatingLongValue.define(this, builder, "Conversion multiplier from Joules to Forge Energy (Joules * ForgeEnergyPerJoule = FE)",
+                    "ForgeEnergyPerJoule", FloatingLong.createConst(0.4), CachedFloatingLongValue.POSITIVE)
+        );
         blacklistFluxNetworks = CachedBooleanValue.wrap(this, builder.comment("Disables Flux Networks higher throughput Forge Energy (FE,RF,IF,uF,CF) power integration. Requires world restart (server-side option in SMP). Note: Disabling Forge Energy integration also disables this.")
               .worldRestart()
               .define("blacklistFluxNetworks", false));
         FROM_H2 = CachedFloatingLongValue.define(this, builder, "How much energy is produced per mB of Hydrogen, also affects Electrolytic Separator usage, Ethylene burn rate and Gas generator energy capacity.",
               "HydrogenEnergyDensity", FloatingLong.createConst(200), CachedFloatingLongValue.POSITIVE);
         ETHENE_BURN_TIME = CachedIntValue.wrap(this, builder.comment("Burn time for Ethylene (1mB hydrogen + 2*bioFuel/tick*200ticks/100mB * 20x efficiency bonus).")
-              .define("EthyleneBurnTime", 40));
+              .defineInRange("EthyleneBurnTime", 40, 1, Integer.MAX_VALUE));
         maxEnergyPerSteam = CachedFloatingLongValue.define(this, builder, "Maximum Joules per mB of Steam. Also affects Thermoelectric Boiler.",
               "maxEnergyPerSteam", FloatingLong.createConst(10));
-        energyUnit = CachedEnumValue.wrap(this, builder.comment("Displayed energy type in Mekanism GUIs.")
-              .defineEnum("energyType", EnergyType.FE));
         builder.pop();
 
         builder.comment("Radiation Settings").push(RADIATION_CATEGORY);
@@ -194,23 +214,23 @@ public class GeneralConfig extends BaseMekanismConfig {
               .define("radiationEnabled", true));
         radiationChunkCheckRadius = CachedIntValue.wrap(this, builder.comment("The radius of chunks checked when running radiation calculations. The algorithm is efficient, but don't abuse it by making this crazy high.")
               .defineInRange("chunkCheckRadius", 5, 1, 100));
-        radiationSourceDecayRate = CachedDoubleValue.wrap(this, builder.comment("Radiation sources are multiplied by this constant roughly once per second to represent their emission decay. At the default rate, it takes roughly 10 days to remove a 1,000 Sv/h (crazy high) source.")
+        radiationSourceDecayRate = CachedDoubleValue.wrap(this, builder.comment("Radiation sources are multiplied by this constant roughly once per second to represent their emission decay. At the default rate, it takes roughly 10 hours to remove a 1,000 Sv/h (crazy high) source.")
               .define("sourceDecayRate", 0.9995D));
         radiationTargetDecayRate = CachedDoubleValue.wrap(this, builder.comment("Radiated objects and entities are multiplied by this constant roughly once per second to represent their dosage decay.")
               .define("targetDecayRate", 0.9995D));
         radiationNegativeEffectsMinSeverity = CachedDoubleValue.wrap(this, builder.comment("Defines the minimum severity radiation dosage severity (scale of 0 to 1) for which negative effects can take place. Set to 1 to disable negative effects completely.")
               .defineInRange("negativeEffectsMinSeverity", 0.1D, 0, 1));
         radioactiveWasteBarrelMaxGas = CachedLongValue.wrap(this, builder.comment("Amount of gas (mB) that can be stored in a Radioactive Waste Barrel.")
-              .defineInRange("radioactiveWasteBarrelMaxGas", 64_000, 1, Long.MAX_VALUE));
+              .defineInRange("radioactiveWasteBarrelMaxGas", 512_000, 1, Long.MAX_VALUE));
         radioactiveWasteBarrelProcessTicks = CachedIntValue.wrap(this, builder.comment("Number of ticks required for radioactive gas stored in a Radioactive Waste Barrel to decay radioactiveWasteBarrelDecayAmount mB.")
-              .defineInRange("radioactiveWasteBarrelProcessTicks", 1_200, 1, Integer.MAX_VALUE));
+              .defineInRange("radioactiveWasteBarrelProcessTicks", 20, 1, Integer.MAX_VALUE));
         radioactiveWasteBarrelDecayAmount = CachedLongValue.wrap(this, builder.comment("Number of mB of gas that decay every radioactiveWasteBarrelProcessTicks ticks when stored in a Radioactive Waste Barrel. Set to zero to disable decay all together. (Gases in the mekanism:waste_barrel_decay_blacklist tag will not decay).")
               .defineInRange("radioactiveWasteBarrelDecayAmount", 1, 0, Long.MAX_VALUE));
         builder.pop();
 
         builder.comment("Digital Miner Settings").push(MINER_CATEGORY);
         minerSilkMultiplier = CachedIntValue.wrap(this, builder.comment("Energy multiplier for using silk touch mode with the Digital Miner.")
-              .define("silkMultiplier", 6));
+              .define("silkMultiplier", 12));
         minerMaxRadius = CachedIntValue.wrap(this, builder.comment("Maximum radius in blocks that the Digital Miner can reach. (Increasing this may have negative effects on stability and/or performance. We strongly recommend you leave it at the default value).")
               .defineInRange("maxRadius", 32, 1, Integer.MAX_VALUE));
         minerTicksPerMine = CachedIntValue.wrap(this, builder.comment("Number of ticks required to mine a single block with a Digital Miner (without any upgrades).")
@@ -226,6 +246,11 @@ public class GeneralConfig extends BaseMekanismConfig {
               "energyNeededPerHardness", FloatingLong.createConst(100_000));
         laserEnergyPerDamage = CachedFloatingLongValue.define(this, builder, "Energy used per half heart of damage being transferred to entities.",
               "energyPerDamage", FloatingLong.createConst(2_500), CachedFloatingLongValue.POSITIVE);
+        builder.pop();
+
+        builder.comment("Oredictionificator Settings").push(OREDICTIONIFICATOR_CATEGORY);
+        validOredictionificatorFilters = CachedOredictionificatorConfigValue.define(this, builder.comment("The list of valid tag prefixes for the Oredictionificator. Note: It is highly recommended to only include well known/defined tag prefixes otherwise it is very easy to potentially add in accidental conversions of things that are not actually equivalent."),
+              "validItemFilters", () -> Collections.singletonMap("forge", List.of("ingots/", "ores/", "dusts/", "nuggets/", "storage_blocks/")));
         builder.pop();
 
         builder.comment("Pump Settings").push(PUMP_CATEGORY);
@@ -255,7 +280,7 @@ public class GeneralConfig extends BaseMekanismConfig {
               .define("opsBypassRestrictions", false));
         builder.pop();
 
-        builder.comment("Nutritional PasteSettings").push(NUTRITIONAL_PASTE_CATEGORY);
+        builder.comment("Nutritional Paste Settings").push(NUTRITIONAL_PASTE_CATEGORY);
         nutritionalPasteSaturation = CachedFloatValue.wrap(this, builder.comment("Saturation level of Nutritional Paste when eaten.")
               .define("saturation", 0.8));
         nutritionalPasteMBPerFood = CachedIntValue.wrap(this, builder.comment("How much mB of Nutritional Paste equates to one 'half-food.'")

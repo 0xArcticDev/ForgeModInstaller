@@ -8,9 +8,9 @@ import mekanism.api.inventory.IInventorySlot;
 import mekanism.common.capabilities.holder.QuantumEntangloporterConfigHolder;
 import mekanism.common.lib.transmitter.TransmissionType;
 import mekanism.common.tile.TileEntityQuantumEntangloporter;
-import net.minecraft.util.Direction;
+import net.minecraft.core.Direction;
 
-public class QuantumEntangloporterInventorySlotHolder extends QuantumEntangloporterConfigHolder implements IInventorySlotHolder {
+public class QuantumEntangloporterInventorySlotHolder extends QuantumEntangloporterConfigHolder<IInventorySlot> implements IInventorySlotHolder {
 
     public QuantumEntangloporterInventorySlotHolder(TileEntityQuantumEntangloporter entangloporter) {
         super(entangloporter);

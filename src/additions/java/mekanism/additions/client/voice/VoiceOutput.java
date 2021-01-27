@@ -13,11 +13,10 @@ public class VoiceOutput extends Thread {
     private SourceDataLine sourceLine;
 
     public VoiceOutput(VoiceClient client) {
+        super("VoiceServer Client Output Thread");
         voiceClient = client;
         speaker = new DataLine.Info(SourceDataLine.class, voiceClient.getAudioFormat(), 2_200);
-
         setDaemon(true);
-        setName("VoiceServer Client Output Thread");
     }
 
     @Override
@@ -57,7 +56,7 @@ public class VoiceOutput extends Thread {
                 } catch (InterruptedException e) {
                     break;
                 } catch (Exception e) {
-                    Mekanism.logger.error(e);
+                    Mekanism.logger.error("VoiceServer: Unexpected Exception", e);
                 }
             }
         } catch (Exception e) {

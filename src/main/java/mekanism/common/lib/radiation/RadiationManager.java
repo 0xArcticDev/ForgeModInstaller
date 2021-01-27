@@ -1,8 +1,15 @@
 package mekanism.common.lib.radiation;
 
+import com.google.common.collect.HashBasedTable;
+import com.google.common.collect.Table;
+import com.google.common.collect.Tables;
+import it.unimi.dsi.fastutil.objects.Object2DoubleMap;
+import it.unimi.dsi.fastutil.objects.Object2DoubleOpenHashMap;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import java.util.ArrayList;
-import java.util.Iterator;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -10,44 +17,58 @@ import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.IntSupplier;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import javax.annotation.ParametersAreNonnullByDefault;
+import mekanism.api.Chunk3D;
 import mekanism.api.Coord4D;
+import mekanism.api.MekanismAPI;
 import mekanism.api.NBTConstants;
+import mekanism.api.chemical.gas.GasStack;
+import mekanism.api.chemical.gas.IGasHandler;
+import mekanism.api.chemical.gas.IGasTank;
+import mekanism.api.chemical.gas.attribute.GasAttributes.Radiation;
+import mekanism.api.radiation.IRadiationManager;
+import mekanism.api.radiation.IRadiationSource;
+import mekanism.api.radiation.capability.IRadiationEntity;
+import mekanism.api.radiation.capability.IRadiationShielding;
 import mekanism.api.text.EnumColor;
 import mekanism.common.Mekanism;
 import mekanism.common.capabilities.Capabilities;
 import mekanism.common.config.MekanismConfig;
-import mekanism.common.lib.HashList;
-import mekanism.common.lib.math.voxel.Chunk3D;
-import mekanism.common.lib.radiation.capability.IRadiationEntity;
-import mekanism.common.lib.radiation.capability.IRadiationShielding;
-import mekanism.common.network.PacketRadiationData;
+import mekanism.common.lib.collection.HashList;
+import mekanism.common.network.to_client.PacketRadiationData;
+import mekanism.common.registries.MekanismDamageSource;
 import mekanism.common.registries.MekanismParticleTypes;
 import mekanism.common.registries.MekanismSounds;
 import mekanism.common.util.CapabilityUtils;
 import mekanism.common.util.EnumUtils;
 import mekanism.common.util.MekanismUtils;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.entity.player.ServerPlayerEntity;
-import net.minecraft.inventory.EquipmentSlotType;
-import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.CompoundNBT;
-import net.minecraft.nbt.ListNBT;
-import net.minecraft.particles.BasicParticleType;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.SoundEvent;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.World;
-import net.minecraft.world.storage.DimensionSavedDataManager;
-import net.minecraft.world.storage.WorldSavedData;
-import net.minecraftforge.common.util.Constants.NBT;
+import net.minecraft.MethodsReturnNonnullByDefault;
+import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.storage.DimensionDataStorage;
 import net.minecraftforge.common.util.LazyOptional;
 import net.minecraftforge.event.entity.living.LivingEvent.LivingUpdateEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.server.ServerLifecycleHooks;
+import net.minecraftforge.server.ServerLifecycleHooks;
 
 /**
  * The RadiationManager handles radiation across all in-game dimensions. Radiation exposure levels are provided in _sieverts, defining a rate of accumulation of
@@ -72,8 +93,14 @@ import net.minecraftforge.fml.server.ServerLifecycleHooks;
  *
  * @author aidancbrady
  */
-public class RadiationManager {
+@ParametersAreNonnullByDefault
+@MethodsReturnNonnullByDefault
+public class RadiationManager implements IRadiationManager {
 
+    /**
+     * RadiationManager for handling radiation across all dimensions
+     */
+    public static final RadiationManager INSTANCE = new RadiationManager();
     private static final String DATA_HANDLER_NAME = "radiation_manager";
     private static final IntSupplier MAX_RANGE = () -> MekanismConfig.general.radiationChunkCheckRadius.get() * 16;
     private static final Random RAND = new Random();
@@ -83,13 +110,15 @@ public class RadiationManager {
 
     private boolean loaded;
 
-    private final Map<Chunk3D, Map<Coord4D, RadiationSource>> radiationMap = new Object2ObjectOpenHashMap<>();
+    private final Table<Chunk3D, Coord4D, RadiationSource> radiationTable = HashBasedTable.create();
+    private final Table<Chunk3D, Coord4D, IRadiationSource> radiationView = Tables.unmodifiableTable(radiationTable);
     private final Map<ResourceLocation, List<Meltdown>> meltdowns = new Object2ObjectOpenHashMap<>();
 
-    private final Map<UUID, RadiationScale> playerExposureMap = new Object2ObjectOpenHashMap<>();
+    private final Object2DoubleMap<UUID> playerExposureMap = new Object2DoubleOpenHashMap<>();
 
     // client fields
     private RadiationScale clientRadiationScale = RadiationScale.NONE;
+    private double clientEnvironmentalRadiation = BASELINE;
 
     /**
      * Note: This can and will be null on the client side
@@ -97,80 +126,147 @@ public class RadiationManager {
     @Nullable
     private RadiationDataHandler dataHandler;
 
+    private RadiationManager() {
+    }
+
+    @Override
+    public boolean isRadiationEnabled() {
+        return MekanismConfig.general.radiationEnabled.get();
+    }
+
+    private void markDirty() {
+        if (dataHandler != null) {
+            dataHandler.setDirty();
+        }
+    }
+
+    @Override
+    public DamageSource getRadiationDamageSource() {
+        return MekanismDamageSource.RADIATION;
+    }
+
+    @Override
     public double getRadiationLevel(Entity entity) {
         return getRadiationLevel(new Coord4D(entity));
     }
 
-    /**
-     * Get the radiation level (in sV/h) at a certain location.
-     *
-     * @param coord - location
-     *
-     * @return radiation level (in sV)
-     */
+    @Override
+    public Table<Chunk3D, Coord4D, IRadiationSource> getRadiationSources() {
+        return radiationView;
+    }
+
+    @Override
+    public void removeRadiationSources(Chunk3D chunk) {
+        Map<Coord4D, RadiationSource> chunkSources = radiationTable.row(chunk);
+        if (!chunkSources.isEmpty()) {
+            chunkSources.clear();
+            markDirty();
+            updateClientRadiationForAll(chunk.dimension);
+        }
+    }
+
+    @Override
+    public void removeRadiationSource(Coord4D coord) {
+        Chunk3D chunk = new Chunk3D(coord);
+        if (radiationTable.contains(chunk, coord)) {
+            radiationTable.remove(chunk, coord);
+            markDirty();
+            updateClientRadiationForAll(coord.dimension);
+        }
+    }
+
+    @Override
     public double getRadiationLevel(Coord4D coord) {
         Set<Chunk3D> checkChunks = new Chunk3D(coord).expand(MekanismConfig.general.radiationChunkCheckRadius.get());
         double level = BASELINE;
-
         for (Chunk3D chunk : checkChunks) {
-            if (radiationMap.containsKey(chunk)) {
-                for (RadiationSource src : radiationMap.get(chunk).values()) {
-                    // we only compute exposure when within the MAX_RANGE bounds
-                    if (src.getPos().distanceTo(coord) <= MAX_RANGE.getAsInt()) {
-                        double add = computeExposure(coord, src);
-                        level += add;
-                    }
+            for (Map.Entry<Coord4D, RadiationSource> entry : radiationTable.row(chunk).entrySet()) {
+                // we only compute exposure when within the MAX_RANGE bounds
+                if (entry.getKey().distanceTo(coord) <= MAX_RANGE.getAsInt()) {
+                    level += computeExposure(coord, entry.getValue());
                 }
             }
         }
-
         return level;
     }
 
+    @Override
     public void radiate(Coord4D coord, double magnitude) {
-        if (!MekanismConfig.general.radiationEnabled.get()) {
+        if (!isRadiationEnabled()) {
             return;
         }
-        Chunk3D chunk = new Chunk3D(coord);
-        boolean found = false;
-        if (radiationMap.containsKey(chunk)) {
-            RadiationSource src = radiationMap.get(chunk).get(coord);
-            if (src != null) {
-                src.radiate(magnitude);
-                found = true;
+        Map<Coord4D, RadiationSource> radiationSourceMap = radiationTable.row(new Chunk3D(coord));
+        RadiationSource src = radiationSourceMap.get(coord);
+        if (src == null) {
+            radiationSourceMap.put(coord, new RadiationSource(coord, magnitude));
+        } else {
+            src.radiate(magnitude);
+        }
+        markDirty();
+        //Update radiation levels immediately
+        updateClientRadiationForAll(coord.dimension);
+    }
+
+    @Override
+    public void radiate(LivingEntity entity, double magnitude) {
+        if (!isRadiationEnabled()) {
+            return;
+        }
+        if (!(entity instanceof Player player) || MekanismUtils.isPlayingMode(player)) {
+            entity.getCapability(Capabilities.RADIATION_ENTITY).ifPresent(c -> c.radiate(magnitude * (1 - Math.min(1, getRadiationResistance(entity)))));
+        }
+    }
+
+    @Override
+    public void dumpRadiation(Coord4D coord, IGasHandler gasHandler, boolean clearRadioactive) {
+        for (int tank = 0, gasTanks = gasHandler.getTanks(); tank < gasTanks; tank++) {
+            if (dumpRadiation(coord, gasHandler.getChemicalInTank(tank)) && clearRadioactive) {
+                gasHandler.setChemicalInTank(tank, GasStack.EMPTY);
             }
         }
-        if (!found) {
-            radiationMap.computeIfAbsent(new Chunk3D(coord), c -> new Object2ObjectOpenHashMap<>()).put(coord, new RadiationSource(coord, magnitude));
+    }
+
+    @Override
+    public void dumpRadiation(Coord4D coord, List<IGasTank> gasTanks, boolean clearRadioactive) {
+        for (IGasTank gasTank : gasTanks) {
+            if (dumpRadiation(coord, gasTank.getStack()) && clearRadioactive) {
+                gasTank.setEmpty();
+            }
         }
     }
 
-    public void radiate(LivingEntity entity, double magnitude) {
-        if (!MekanismConfig.general.radiationEnabled.get()) {
-            return;
+    @Override
+    public boolean dumpRadiation(Coord4D coord, GasStack stack) {
+        if (!stack.isEmpty() && stack.has(Radiation.class)) {
+            double radioactivity = stack.get(Radiation.class).getRadioactivity();
+            radiate(coord, radioactivity * stack.getAmount());
+            return true;
         }
-        if (!(entity instanceof PlayerEntity) || MekanismUtils.isPlayingMode((PlayerEntity) entity)) {
-            entity.getCapability(Capabilities.RADIATION_ENTITY_CAPABILITY).ifPresent(c -> c.radiate(magnitude * (1 - Math.min(1, getRadiationResistance(entity)))));
-        }
+        return false;
     }
 
-    public void createMeltdown(World world, BlockPos minPos, BlockPos maxPos, double magnitude, double chance) {
-        meltdowns.computeIfAbsent(world.getDimensionKey().getLocation(), id -> new ArrayList<>()).add(new Meltdown(world, minPos, maxPos, magnitude, chance));
+    public void createMeltdown(Level world, BlockPos minPos, BlockPos maxPos, double magnitude, double chance, UUID multiblockID) {
+        meltdowns.computeIfAbsent(world.dimension().location(), id -> new ArrayList<>()).add(new Meltdown(minPos, maxPos, magnitude, chance, multiblockID));
+        markDirty();
     }
 
     public void clearSources() {
-        radiationMap.clear();
+        if (!radiationTable.isEmpty()) {
+            radiationTable.clear();
+            markDirty();
+            updateClientRadiationForAll(player -> true);
+        }
     }
 
     private double computeExposure(Coord4D coord, RadiationSource source) {
-        return source.getMagnitude() / Math.max(1, Math.pow(coord.distanceTo(source.getPos()), 2));
+        return source.getMagnitude() / Math.max(1, coord.distanceToSquared(source.getPos()));
     }
 
     private double getRadiationResistance(LivingEntity entity) {
         double resistance = 0;
-        for (EquipmentSlotType type : EnumUtils.ARMOR_SLOTS) {
-            ItemStack stack = entity.getItemStackFromSlot(type);
-            Optional<IRadiationShielding> shielding = CapabilityUtils.getCapability(stack, Capabilities.RADIATION_SHIELDING_CAPABILITY, null).resolve();
+        for (EquipmentSlot type : EnumUtils.ARMOR_SLOTS) {
+            ItemStack stack = entity.getItemBySlot(type);
+            Optional<IRadiationShielding> shielding = CapabilityUtils.getCapability(stack, Capabilities.RADIATION_SHIELDING, null).resolve();
             if (shielding.isPresent()) {
                 resistance += shielding.get().getRadiationShielding();
             }
@@ -178,63 +274,92 @@ public class RadiationManager {
         return resistance;
     }
 
-    public void setClientScale(RadiationScale scale) {
-        clientRadiationScale = scale;
+    private void updateClientRadiationForAll(ResourceKey<Level> dimension) {
+        updateClientRadiationForAll(player -> player.getLevel().dimension() == dimension);
     }
 
-    public RadiationScale getClientScale() {
-        return clientRadiationScale;
-    }
-
-    public void tickClient(PlayerEntity player) {
-        // perhaps also play geiger counter sound effect, even when not using item (similar to fallout)
-        if (clientRadiationScale != RadiationScale.NONE && player.world.getRandom().nextInt(2) == 0) {
-            int count = player.world.getRandom().nextInt(clientRadiationScale.ordinal() * MekanismConfig.client.radiationParticleCount.get());
-            int radius = MekanismConfig.client.radiationParticleRadius.get();
-            for (int i = 0; i < count; i++) {
-                double x = player.getPosX() + player.world.getRandom().nextDouble() * radius * 2 - radius;
-                double y = player.getPosY() + player.world.getRandom().nextDouble() * radius * 2 - radius;
-                double z = player.getPosZ() + player.world.getRandom().nextDouble() * radius * 2 - radius;
-                player.world.addParticle((BasicParticleType) MekanismParticleTypes.RADIATION.getParticleType(), x, y, z, 0, 0, 0);
+    private void updateClientRadiationForAll(Predicate<ServerPlayer> clearForPlayer) {
+        MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
+        if (server != null) {
+            //Validate it is not null in case we somehow are being called from the client or at some other unexpected time
+            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                if (clearForPlayer.test(player)) {
+                    updateClientRadiation(player);
+                }
             }
         }
     }
 
-    public void tickServer(ServerPlayerEntity player) {
+    public void updateClientRadiation(ServerPlayer player) {
+        double magnitude = getRadiationLevel(player);
+        double scaledMagnitude = Math.ceil(magnitude / BASELINE);
+        //If the last sync radiation value is different in magnitude by over the baseline, sync
+        // Note: If it is not present this will always be marked as needing a sync as it is not possible for scaledMagnitude
+        // to be zero as magnitude will always be at least BASELINE
+        if (scaledMagnitude != playerExposureMap.getOrDefault(player.getUUID(), 0)) {
+            playerExposureMap.put(player.getUUID(), scaledMagnitude);
+            Mekanism.packetHandler().sendTo(PacketRadiationData.createEnvironmental(magnitude), player);
+        }
+    }
+
+    public void setClientEnvironmentalRadiation(double radiation) {
+        clientEnvironmentalRadiation = radiation;
+        clientRadiationScale = RadiationScale.get(clientEnvironmentalRadiation);
+    }
+
+    public double getClientEnvironmentalRadiation() {
+        return isRadiationEnabled() ? clientEnvironmentalRadiation : BASELINE;
+    }
+
+    public RadiationScale getClientScale() {
+        return isRadiationEnabled() ? clientRadiationScale : RadiationScale.NONE;
+    }
+
+    public void tickClient(Player player) {
+        // terminate early if we're disabled
+        if (!isRadiationEnabled()) {
+            return;
+        }
+        // perhaps also play Geiger counter sound effect, even when not using item (similar to fallout)
+        if (clientRadiationScale != RadiationScale.NONE && player.level.getRandom().nextInt(2) == 0) {
+            int count = player.level.getRandom().nextInt(clientRadiationScale.ordinal() * MekanismConfig.client.radiationParticleCount.get());
+            int radius = MekanismConfig.client.radiationParticleRadius.get();
+            for (int i = 0; i < count; i++) {
+                double x = player.getX() + player.level.getRandom().nextDouble() * radius * 2 - radius;
+                double y = player.getY() + player.level.getRandom().nextDouble() * radius * 2 - radius;
+                double z = player.getZ() + player.level.getRandom().nextDouble() * radius * 2 - radius;
+                player.level.addParticle(MekanismParticleTypes.RADIATION.get(), x, y, z, 0, 0, 0);
+            }
+        }
+    }
+
+    public void tickServer(ServerPlayer player) {
         updateEntityRadiation(player);
     }
 
-    public void updateEntityRadiation(LivingEntity entity) {
+    private void updateEntityRadiation(LivingEntity entity) {
         // terminate early if we're disabled
-        if (!MekanismConfig.general.radiationEnabled.get()) {
+        if (!isRadiationEnabled()) {
             return;
         }
-        LazyOptional<IRadiationEntity> radiationCap = entity.getCapability(Capabilities.RADIATION_ENTITY_CAPABILITY);
+        LazyOptional<IRadiationEntity> radiationCap = entity.getCapability(Capabilities.RADIATION_ENTITY);
         // each tick, there is a 1/20 chance we will apply radiation to each player
         // this helps distribute the CPU load across ticks, and makes exposure slightly inconsistent
-        if (entity.world.getRandom().nextInt(20) == 0) {
-            double magnitude = getRadiationLevel(new Coord4D(entity));
-            if (magnitude > BASELINE && (!(entity instanceof PlayerEntity) || MekanismUtils.isPlayingMode((PlayerEntity) entity))) {
+        if (entity.level.getRandom().nextInt(20) == 0) {
+            double magnitude = getRadiationLevel(entity);
+            if (magnitude > BASELINE && (!(entity instanceof Player player) || MekanismUtils.isPlayingMode(player))) {
                 // apply radiation to the player
                 radiate(entity, magnitude / 3_600D); // convert to Sv/s
             }
             radiationCap.ifPresent(IRadiationEntity::decay);
-            if (entity instanceof ServerPlayerEntity) {
-                ServerPlayerEntity player = (ServerPlayerEntity) entity;
-                RadiationScale scale = RadiationScale.get(magnitude);
-                if (playerExposureMap.get(player.getUniqueID()) != scale) {
-                    playerExposureMap.put(player.getUniqueID(), scale);
-                    Mekanism.packetHandler.sendTo(PacketRadiationData.create(scale), player);
-                }
-            }
         }
         // update the radiation capability (decay, sync, effects)
         radiationCap.ifPresent(c -> c.update(entity));
     }
 
-    public void tickServerWorld(World world) {
+    public void tickServerWorld(Level world) {
         // terminate early if we're disabled
-        if (!MekanismConfig.general.radiationEnabled.get()) {
+        if (!isRadiationEnabled()) {
             return;
         }
         if (!loaded) {
@@ -242,29 +367,30 @@ public class RadiationManager {
         }
 
         // update meltdowns
-        ResourceLocation dimension = world.getDimensionKey().getLocation();
-        if (meltdowns.containsKey(dimension)) {
-            meltdowns.get(dimension).removeIf(Meltdown::update);
+        List<Meltdown> dimensionMeltdowns = meltdowns.getOrDefault(world.dimension().location(), Collections.emptyList());
+        if (!dimensionMeltdowns.isEmpty()) {
+            dimensionMeltdowns.removeIf(meltdown -> meltdown.update(world));
+            //If we have/had any meltdowns mark our data handler as dirty as when a meltdown updates
+            // the number of ticks it has been around for will change
+            markDirty();
         }
     }
 
     public void tickServer() {
         // terminate early if we're disabled
-        if (!MekanismConfig.general.radiationEnabled.get()) {
+        if (!isRadiationEnabled()) {
             return;
         }
         // each tick, there's a 1/20 chance we'll decay radiation sources (averages to 1 decay operation per second)
         if (RAND.nextInt(20) == 0) {
-            for (Map<Coord4D, RadiationSource> set : radiationMap.values()) {
-                for (Iterator<Map.Entry<Coord4D, RadiationSource>> iter = set.entrySet().iterator(); iter.hasNext(); ) {
-                    Map.Entry<Coord4D, RadiationSource> entry = iter.next();
-                    if (entry.getValue().decay()) {
-                        // remove if source gets too low
-                        iter.remove();
-                    }
-
-                    dataHandler.markDirty();
-                }
+            Collection<RadiationSource> sources = radiationTable.values();
+            if (!sources.isEmpty()) {
+                // remove if source gets too low
+                sources.removeIf(RadiationSource::decay);
+                //Mark dirty regardless if we have any sources as magnitude changes or radiation sources change
+                markDirty();
+                //Update radiation levels for any players where it has changed
+                updateClientRadiationForAll(player -> true);
             }
         }
     }
@@ -275,17 +401,22 @@ public class RadiationManager {
     public void createOrLoad() {
         if (dataHandler == null) {
             //Always associate the world with the over world as the frequencies are global
-            DimensionSavedDataManager savedData = ServerLifecycleHooks.getCurrentServer().func_241755_D_().getSavedData();
-            dataHandler = savedData.getOrCreate(RadiationDataHandler::new, DATA_HANDLER_NAME);
-            dataHandler.setManager(this);
-            dataHandler.syncManager();
+            DimensionDataStorage savedData = ServerLifecycleHooks.getCurrentServer().overworld().getDataStorage();
+            dataHandler = savedData.computeIfAbsent(tag -> {
+                RadiationDataHandler handler = new RadiationDataHandler();
+                handler.load(tag);
+                return handler;
+            }, RadiationDataHandler::new, DATA_HANDLER_NAME);
+            dataHandler.setManagerAndSync(this);
+            dataHandler.clearCached();
         }
 
         loaded = true;
     }
 
     public void reset() {
-        clearSources();
+        //Clear the table directly instead of via the method, so it doesn't mark it as dirty
+        radiationTable.clear();
         playerExposureMap.clear();
         meltdowns.clear();
         dataHandler = null;
@@ -294,16 +425,17 @@ public class RadiationManager {
 
     public void resetClient() {
         clientRadiationScale = RadiationScale.NONE;
+        clientEnvironmentalRadiation = BASELINE;
     }
 
     public void resetPlayer(UUID uuid) {
-        playerExposureMap.remove(uuid);
+        playerExposureMap.removeDouble(uuid);
     }
 
     @SubscribeEvent
     public void onLivingUpdate(LivingUpdateEvent event) {
-        World world = event.getEntityLiving().getEntityWorld();
-        if (!world.isRemote() && !(event.getEntityLiving() instanceof PlayerEntity) && world.getRandom().nextInt() % 20 == 0) {
+        Level world = event.getEntityLiving().getCommandSenderWorld();
+        if (!world.isClientSide() && !(event.getEntityLiving() instanceof Player)) {
             updateEntityRadiation(event.getEntityLiving());
         }
     }
@@ -330,9 +462,8 @@ public class RadiationManager {
                 return ELEVATED;
             } else if (magnitude < 100) {
                 return HIGH;
-            } else {
-                return EXTREME;
             }
+            return EXTREME;
         }
 
         /**
@@ -349,9 +480,8 @@ public class RadiationManager {
                 return EnumColor.ORANGE;
             } else if (magnitude < 10) { // 100 Sv/h
                 return EnumColor.RED;
-            } else {
-                return EnumColor.DARK_RED;
             }
+            return EnumColor.DARK_RED;
         }
 
         private static final double LOG_BASELINE = Math.log10(MIN_MAGNITUDE);
@@ -369,68 +499,99 @@ public class RadiationManager {
         }
 
         public SoundEvent getSoundEvent() {
-            switch (this) {
-                case LOW:
-                    return MekanismSounds.GEIGER_SLOW.get();
-                case MEDIUM:
-                    return MekanismSounds.GEIGER_MEDIUM.get();
-                case ELEVATED:
-                case HIGH:
-                    return MekanismSounds.GEIGER_ELEVATED.get();
-                case EXTREME:
-                    return MekanismSounds.GEIGER_FAST.get();
-                default:
-                    return null;
-            }
+            return switch (this) {
+                case LOW -> MekanismSounds.GEIGER_SLOW.get();
+                case MEDIUM -> MekanismSounds.GEIGER_MEDIUM.get();
+                case ELEVATED, HIGH -> MekanismSounds.GEIGER_ELEVATED.get();
+                case EXTREME -> MekanismSounds.GEIGER_FAST.get();
+                default -> null;
+            };
         }
     }
 
-    public static class RadiationDataHandler extends WorldSavedData {
+    public static class RadiationDataHandler extends SavedData {
 
+        private Map<ResourceLocation, List<Meltdown>> savedMeltdowns = Collections.emptyMap();
+        public List<RadiationSource> loadedSources = Collections.emptyList();
         public RadiationManager manager;
-        public List<RadiationSource> loadedSources;
 
-        public RadiationDataHandler() {
-            super(DATA_HANDLER_NAME);
-        }
-
-        public void setManager(RadiationManager m) {
+        public void setManagerAndSync(RadiationManager m) {
             manager = m;
-        }
-
-        public void syncManager() {
             // don't sync the manager if radiation has been disabled
-            if (loadedSources != null && MekanismConfig.general.radiationEnabled.get()) {
+            if (MekanismAPI.getRadiationManager().isRadiationEnabled()) {
                 for (RadiationSource source : loadedSources) {
-                    Chunk3D chunk = new Chunk3D(source.getPos());
-                    manager.radiationMap.computeIfAbsent(chunk, c -> new Object2ObjectOpenHashMap<>()).put(source.getPos(), source);
+                    manager.radiationTable.put(new Chunk3D(source.getPos()), source.getPos(), source);
+                }
+                for (Map.Entry<ResourceLocation, List<Meltdown>> entry : savedMeltdowns.entrySet()) {
+                    List<Meltdown> meltdowns = entry.getValue();
+                    manager.meltdowns.computeIfAbsent(entry.getKey(), id -> new ArrayList<>(meltdowns.size())).addAll(meltdowns);
                 }
             }
         }
 
-        @Override
-        public void read(@Nonnull CompoundNBT nbtTags) {
-            if (nbtTags.contains(NBTConstants.RADIATION_LIST, NBT.TAG_LIST)) {
-                ListNBT list = nbtTags.getList(NBTConstants.RADIATION_LIST, NBT.TAG_COMPOUND);
-                loadedSources = new HashList<>();
-                for (int i = 0; i < list.size(); i++) {
-                    loadedSources.add(RadiationSource.load(list.getCompound(0)));
+        public void clearCached() {
+            //Clear cached sources and meltdowns after loading them to not keep pointers in our data handler
+            // that are referencing objects that eventually will be removed
+            loadedSources = Collections.emptyList();
+            savedMeltdowns = Collections.emptyMap();
+        }
+
+        public void load(@Nonnull CompoundTag nbtTags) {
+            if (nbtTags.contains(NBTConstants.RADIATION_LIST, Tag.TAG_LIST)) {
+                ListTag list = nbtTags.getList(NBTConstants.RADIATION_LIST, Tag.TAG_COMPOUND);
+                loadedSources = new HashList<>(list.size());
+                for (Tag nbt : list) {
+                    loadedSources.add(RadiationSource.load((CompoundTag) nbt));
                 }
+            } else {
+                loadedSources = Collections.emptyList();
+            }
+            if (nbtTags.contains(NBTConstants.MELTDOWNS, Tag.TAG_COMPOUND)) {
+                CompoundTag meltdownNBT = nbtTags.getCompound(NBTConstants.MELTDOWNS);
+                savedMeltdowns = new HashMap<>(meltdownNBT.size());
+                for (String dim : meltdownNBT.getAllKeys()) {
+                    ResourceLocation dimension = ResourceLocation.tryParse(dim);
+                    if (dimension != null) {
+                        //It should be a valid dimension, but validate it just in case
+                        ListTag meltdowns = meltdownNBT.getList(dim, Tag.TAG_COMPOUND);
+                        savedMeltdowns.put(dimension, meltdowns.stream().map(nbt -> Meltdown.load((CompoundTag) nbt)).collect(Collectors.toList()));
+                    }
+                }
+            } else {
+                savedMeltdowns = Collections.emptyMap();
             }
         }
 
         @Nonnull
         @Override
-        public CompoundNBT write(@Nonnull CompoundNBT nbtTags) {
-            ListNBT list = new ListNBT();
-            for (Map<Coord4D, RadiationSource> map : manager.radiationMap.values()) {
-                for (RadiationSource source : map.values()) {
-                    CompoundNBT compound = new CompoundNBT();
+        public CompoundTag save(@Nonnull CompoundTag nbtTags) {
+            if (!manager.radiationTable.isEmpty()) {
+                ListTag list = new ListTag();
+                for (RadiationSource source : manager.radiationTable.values()) {
+                    CompoundTag compound = new CompoundTag();
                     source.write(compound);
                     list.add(compound);
                 }
+                nbtTags.put(NBTConstants.RADIATION_LIST, list);
             }
-            nbtTags.put(NBTConstants.RADIATION_LIST, list);
+            if (!manager.meltdowns.isEmpty()) {
+                CompoundTag meltdownNBT = new CompoundTag();
+                for (Map.Entry<ResourceLocation, List<Meltdown>> entry : manager.meltdowns.entrySet()) {
+                    List<Meltdown> meltdowns = entry.getValue();
+                    if (!meltdowns.isEmpty()) {
+                        ListTag list = new ListTag();
+                        for (Meltdown meltdown : meltdowns) {
+                            CompoundTag compound = new CompoundTag();
+                            meltdown.write(compound);
+                            list.add(compound);
+                        }
+                        meltdownNBT.put(entry.getKey().toString(), list);
+                    }
+                }
+                if (!meltdownNBT.isEmpty()) {
+                    nbtTags.put(NBTConstants.MELTDOWNS, meltdownNBT);
+                }
+            }
             return nbtTags;
         }
     }

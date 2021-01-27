@@ -2,10 +2,15 @@ package mekanism.client.model;
 
 import javax.annotation.Nonnull;
 import mekanism.api.providers.IItemProvider;
+import mekanism.common.item.ItemModule;
+import mekanism.common.registration.impl.FluidDeferredRegister;
 import mekanism.common.registration.impl.FluidRegistryObject;
+import mekanism.common.registration.impl.ItemDeferredRegister;
+import mekanism.common.util.RegistryUtils;
 import net.minecraft.data.DataGenerator;
-import net.minecraft.resources.ResourcePackType;
-import net.minecraft.util.ResourceLocation;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.packs.PackType;
+import net.minecraft.world.item.Item;
 import net.minecraftforge.client.model.generators.ItemModelBuilder;
 import net.minecraftforge.client.model.generators.ItemModelProvider;
 import net.minecraftforge.client.model.generators.loaders.DynamicBucketModelBuilder;
@@ -24,7 +29,7 @@ public abstract class BaseItemModelProvider extends ItemModelProvider {
     }
 
     public boolean textureExists(ResourceLocation texture) {
-        return existingFileHelper.exists(texture, ResourcePackType.CLIENT_RESOURCES, ".png", "textures");
+        return existingFileHelper.exists(texture, PackType.CLIENT_RESOURCES, ".png", "textures");
     }
 
     protected ResourceLocation itemTexture(IItemProvider itemProvider) {
@@ -34,6 +39,21 @@ public abstract class BaseItemModelProvider extends ItemModelProvider {
     protected void registerGenerated(IItemProvider... itemProviders) {
         for (IItemProvider itemProvider : itemProviders) {
             generated(itemProvider);
+        }
+    }
+
+    protected void registerModules(ItemDeferredRegister register) {
+        for (IItemProvider itemProvider : register.getAllItems()) {
+            Item item = itemProvider.asItem();
+            if (item instanceof ItemModule) {
+                generated(itemProvider);
+            }
+        }
+    }
+
+    protected void registerBuckets(FluidDeferredRegister register) {
+        for (FluidRegistryObject<?, ?, ?, ?, ?> fluidRegistryObject : register.getAllFluids()) {
+            registerBucket(fluidRegistryObject);
         }
     }
 
@@ -72,8 +92,8 @@ public abstract class BaseItemModelProvider extends ItemModelProvider {
     }
 
     //Note: This isn't the best way to do this in terms of model file validation, but it works
-    protected void registerBucket(FluidRegistryObject<?, ?, ?, ?> fluidRO) {
-        withExistingParent(fluidRO.getBucket().getRegistryName().getPath(), new ResourceLocation("forge", "item/bucket"))
+    protected void registerBucket(FluidRegistryObject<?, ?, ?, ?, ?> fluidRO) {
+        withExistingParent(RegistryUtils.getPath(fluidRO.getBucket()), new ResourceLocation("forge", "item/bucket"))
               .customLoader(DynamicBucketModelBuilder::begin)
               .fluid(fluidRO.getStillFluid());
     }

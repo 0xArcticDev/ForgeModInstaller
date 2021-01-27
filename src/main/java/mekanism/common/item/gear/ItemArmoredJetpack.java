@@ -3,24 +3,22 @@ package mekanism.common.item.gear;
 import com.google.common.collect.ImmutableMultimap;
 import com.google.common.collect.Multimap;
 import java.util.UUID;
+import java.util.function.Consumer;
 import javax.annotation.Nonnull;
 import javax.annotation.ParametersAreNonnullByDefault;
-import mcp.MethodsReturnNonnullByDefault;
-import mekanism.client.render.armor.CustomArmor;
-import mekanism.client.render.armor.JetpackArmor;
-import mekanism.client.render.item.ISTERProvider;
+import mekanism.client.render.RenderPropertiesProvider;
 import mekanism.common.Mekanism;
 import mekanism.common.config.MekanismConfig;
 import mekanism.common.lib.attribute.AttributeCache;
 import mekanism.common.lib.attribute.IAttributeRefresher;
-import net.minecraft.entity.ai.attributes.Attribute;
-import net.minecraft.entity.ai.attributes.AttributeModifier;
-import net.minecraft.entity.ai.attributes.AttributeModifier.Operation;
-import net.minecraft.entity.ai.attributes.Attributes;
-import net.minecraft.inventory.EquipmentSlotType;
-import net.minecraft.item.ItemStack;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.api.distmarker.OnlyIn;
+import net.minecraft.MethodsReturnNonnullByDefault;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.ai.attributes.Attribute;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.item.ItemStack;
+import net.minecraftforge.client.IItemRenderProperties;
 
 public class ItemArmoredJetpack extends ItemJetpack implements IAttributeRefresher {
 
@@ -29,38 +27,39 @@ public class ItemArmoredJetpack extends ItemJetpack implements IAttributeRefresh
     private final AttributeCache attributeCache;
 
     public ItemArmoredJetpack(Properties properties) {
-        super(ARMORED_JETPACK_MATERIAL, properties.setISTER(ISTERProvider::armoredJetpack));
-        this.attributeCache = new AttributeCache(this, MekanismConfig.gear.armoredJetpackArmor, MekanismConfig.gear.armoredJetpackToughness);
+        super(ARMORED_JETPACK_MATERIAL, properties);
+        this.attributeCache = new AttributeCache(this, MekanismConfig.gear.armoredJetpackArmor, MekanismConfig.gear.armoredJetpackToughness,
+              MekanismConfig.gear.armoredJetpackKnockbackResistance);
     }
 
     @Override
-    public int getDamageReduceAmount() {
-        return getArmorMaterial().getDamageReductionAmount(getEquipmentSlot());
+    public void initializeClient(@Nonnull Consumer<IItemRenderProperties> consumer) {
+        consumer.accept(RenderPropertiesProvider.armoredJetpack());
+    }
+
+    @Override
+    public int getDefense() {
+        return getMaterial().getDefenseForSlot(getSlot());
     }
 
     @Override
     public float getToughness() {
-        return getArmorMaterial().getToughness();
+        return getMaterial().getToughness();
     }
 
     @Nonnull
     @Override
-    public Multimap<Attribute, AttributeModifier> getAttributeModifiers(@Nonnull EquipmentSlotType slot, @Nonnull ItemStack stack) {
-        return slot == getEquipmentSlot() ? attributeCache.getAttributes() : ImmutableMultimap.of();
+    public Multimap<Attribute, AttributeModifier> getAttributeModifiers(@Nonnull EquipmentSlot slot, @Nonnull ItemStack stack) {
+        return slot == getSlot() ? attributeCache.getAttributes() : ImmutableMultimap.of();
     }
 
     @Override
     public void addToBuilder(ImmutableMultimap.Builder<Attribute, AttributeModifier> builder) {
-        UUID modifier = ARMOR_MODIFIERS[getEquipmentSlot().getIndex()];
-        builder.put(Attributes.ARMOR, new AttributeModifier(modifier, "Armor modifier", getDamageReduceAmount(), Operation.ADDITION));
+        UUID modifier = ARMOR_MODIFIER_UUID_PER_SLOT[getSlot().getIndex()];
+        builder.put(Attributes.ARMOR, new AttributeModifier(modifier, "Armor modifier", getDefense(), Operation.ADDITION));
         builder.put(Attributes.ARMOR_TOUGHNESS, new AttributeModifier(modifier, "Armor toughness", getToughness(), Operation.ADDITION));
-    }
-
-    @Nonnull
-    @Override
-    @OnlyIn(Dist.CLIENT)
-    public CustomArmor getGearModel() {
-        return JetpackArmor.ARMORED_JETPACK;
+        builder.put(Attributes.KNOCKBACK_RESISTANCE, new AttributeModifier(modifier, "Armor knockback resistance", getMaterial().getKnockbackResistance(),
+              Operation.ADDITION));
     }
 
     @ParametersAreNonnullByDefault
@@ -68,8 +67,8 @@ public class ItemArmoredJetpack extends ItemJetpack implements IAttributeRefresh
     private static class ArmoredJetpackMaterial extends JetpackMaterial {
 
         @Override
-        public int getDamageReductionAmount(EquipmentSlotType slotType) {
-            return slotType == EquipmentSlotType.CHEST ? MekanismConfig.gear.armoredJetpackArmor.get() : 0;
+        public int getDefenseForSlot(EquipmentSlot slotType) {
+            return slotType == EquipmentSlot.CHEST ? MekanismConfig.gear.armoredJetpackArmor.getOrDefault() : 0;
         }
 
         @Override
@@ -79,7 +78,12 @@ public class ItemArmoredJetpack extends ItemJetpack implements IAttributeRefresh
 
         @Override
         public float getToughness() {
-            return MekanismConfig.gear.armoredJetpackToughness.get();
+            return MekanismConfig.gear.armoredJetpackToughness.getOrDefault();
+        }
+
+        @Override
+        public float getKnockbackResistance() {
+            return MekanismConfig.gear.armoredJetpackKnockbackResistance.getOrDefault();
         }
     }
 }

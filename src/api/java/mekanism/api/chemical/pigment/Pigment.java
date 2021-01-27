@@ -2,16 +2,17 @@ package mekanism.api.chemical.pigment;
 
 import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
-import mcp.MethodsReturnNonnullByDefault;
 import mekanism.api.MekanismAPI;
 import mekanism.api.NBTConstants;
 import mekanism.api.chemical.Chemical;
 import mekanism.api.chemical.ChemicalTags;
 import mekanism.api.chemical.ChemicalUtils;
 import mekanism.api.providers.IPigmentProvider;
-import net.minecraft.nbt.CompoundNBT;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.Util;
+import net.minecraft.MethodsReturnNonnullByDefault;
+import net.minecraft.Util;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraftforge.registries.IForgeRegistry;
 
 /**
  * Represents a pigment chemical subtype
@@ -24,7 +25,7 @@ public class Pigment extends Chemical<Pigment> implements IPigmentProvider {
         super(builder, ChemicalTags.PIGMENT);
     }
 
-    public static Pigment readFromNBT(@Nullable CompoundNBT nbtTags) {
+    public static Pigment readFromNBT(@Nullable CompoundTag nbtTags) {
         return ChemicalUtils.readChemicalFromNBT(nbtTags, MekanismAPI.EMPTY_PIGMENT, NBTConstants.PIGMENT_NAME, Pigment::getFromRegistry);
     }
 
@@ -38,7 +39,7 @@ public class Pigment extends Chemical<Pigment> implements IPigmentProvider {
     }
 
     @Override
-    public CompoundNBT write(CompoundNBT nbtTags) {
+    public CompoundTag write(CompoundTag nbtTags) {
         nbtTags.putString(NBTConstants.PIGMENT_NAME, getRegistryName().toString());
         return nbtTags;
     }
@@ -49,7 +50,15 @@ public class Pigment extends Chemical<Pigment> implements IPigmentProvider {
     }
 
     @Override
+    @SuppressWarnings("ConstantConditions")
+    public final ResourceLocation getRegistryName() {
+        //May be null if called before the object is registered
+        IForgeRegistry<Pigment> registry = MekanismAPI.pigmentRegistry();
+        return registry == null ? null : registry.getKey(this);
+    }
+
+    @Override
     protected String getDefaultTranslationKey() {
-        return Util.makeTranslationKey("pigment", getRegistryName());
+        return Util.makeDescriptionId("pigment", getRegistryName());
     }
 }

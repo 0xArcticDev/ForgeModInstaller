@@ -10,12 +10,12 @@ import mekanism.api.text.ILangEntry;
 import mekanism.common.block.attribute.Attribute;
 import mekanism.common.block.attribute.AttributeState;
 import mekanism.generators.common.GeneratorsLang;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.state.EnumProperty;
-import net.minecraft.state.Property;
-import net.minecraft.util.IStringSerializable;
-import net.minecraft.util.text.ITextComponent;
+import net.minecraft.network.chat.Component;
+import net.minecraft.util.StringRepresentable;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.EnumProperty;
+import net.minecraft.world.level.block.state.properties.Property;
 
 public class AttributeStateFissionPortMode implements AttributeState {
 
@@ -23,15 +23,15 @@ public class AttributeStateFissionPortMode implements AttributeState {
 
     @Override
     public BlockState copyStateData(BlockState oldState, BlockState newState) {
-        if (Attribute.has(newState.getBlock(), AttributeStateFissionPortMode.class)) {
-            newState = newState.with(modeProperty, oldState.get(modeProperty));
+        if (Attribute.has(newState, AttributeStateFissionPortMode.class)) {
+            newState = newState.setValue(modeProperty, oldState.getValue(modeProperty));
         }
         return newState;
     }
 
     @Override
     public BlockState getDefaultState(@Nonnull BlockState state) {
-        return state.with(modeProperty, FissionPortMode.INPUT);
+        return state.setValue(modeProperty, FissionPortMode.INPUT);
     }
 
     @Override
@@ -39,7 +39,7 @@ public class AttributeStateFissionPortMode implements AttributeState {
         properties.add(modeProperty);
     }
 
-    public enum FissionPortMode implements IStringSerializable, IHasTextComponent, IIncrementalEnum<FissionPortMode> {
+    public enum FissionPortMode implements StringRepresentable, IHasTextComponent, IIncrementalEnum<FissionPortMode> {
         INPUT("input", GeneratorsLang.FISSION_PORT_MODE_INPUT, EnumColor.BRIGHT_GREEN),
         OUTPUT_WASTE("output_waste", GeneratorsLang.FISSION_PORT_MODE_OUTPUT_WASTE, EnumColor.BROWN),
         OUTPUT_COOLANT("output_coolant", GeneratorsLang.FISSION_PORT_MODE_OUTPUT_COOLANT, EnumColor.DARK_AQUA);
@@ -58,12 +58,12 @@ public class AttributeStateFissionPortMode implements AttributeState {
 
         @Nonnull
         @Override
-        public String getString() {
+        public String getSerializedName() {
             return name;
         }
 
         @Override
-        public ITextComponent getTextComponent() {
+        public Component getTextComponent() {
             return langEntry.translateColored(color);
         }
 

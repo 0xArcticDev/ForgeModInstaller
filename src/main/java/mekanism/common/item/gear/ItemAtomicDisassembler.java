@@ -3,101 +3,117 @@ package mekanism.common.item.gear;
 import com.google.common.collect.ImmutableMultimap;
 import com.google.common.collect.ImmutableMultimap.Builder;
 import com.google.common.collect.Multimap;
-import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
-import java.util.ArrayList;
+import it.unimi.dsi.fastutil.objects.Object2BooleanMaps;
+import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import mekanism.api.Action;
+import mekanism.api.AutomationType;
 import mekanism.api.IDisableableEnum;
 import mekanism.api.NBTConstants;
 import mekanism.api.energy.IEnergyContainer;
-import mekanism.api.inventory.AutomationType;
 import mekanism.api.math.FloatingLong;
 import mekanism.api.math.MathUtils;
 import mekanism.api.text.EnumColor;
 import mekanism.api.text.IHasTextComponent;
 import mekanism.api.text.ILangEntry;
-import mekanism.client.render.item.ISTERProvider;
-import mekanism.common.Mekanism;
+import mekanism.client.render.RenderPropertiesProvider;
 import mekanism.common.MekanismLang;
-import mekanism.common.block.BlockBounding;
 import mekanism.common.config.MekanismConfig;
+import mekanism.common.content.gear.mekatool.ModuleVeinMiningUnit;
 import mekanism.common.item.ItemEnergized;
 import mekanism.common.item.gear.ItemAtomicDisassembler.DisassemblerMode;
 import mekanism.common.item.interfaces.IItemHUDProvider;
-import mekanism.common.item.interfaces.IModeItem;
 import mekanism.common.item.interfaces.IRadialModeItem;
 import mekanism.common.item.interfaces.IRadialSelectorEnum;
-import mekanism.common.network.PacketLightningRender;
-import mekanism.common.network.PacketLightningRender.LightningPreset;
 import mekanism.common.tags.MekanismTags;
 import mekanism.common.util.ItemDataUtils;
 import mekanism.common.util.MekanismUtils;
 import mekanism.common.util.StorageUtils;
-import mekanism.common.util.WorldUtils;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.client.util.ITooltipFlag;
-import net.minecraft.enchantment.Enchantment;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.ai.attributes.Attribute;
-import net.minecraft.entity.ai.attributes.AttributeModifier;
-import net.minecraft.entity.ai.attributes.AttributeModifier.Operation;
-import net.minecraft.entity.ai.attributes.Attributes;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.entity.player.ServerPlayerEntity;
-import net.minecraft.inventory.EquipmentSlotType;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Rarity;
-import net.minecraft.nbt.CompoundNBT;
-import net.minecraft.stats.Stats;
-import net.minecraft.tileentity.TileEntity;
-import net.minecraft.util.DamageSource;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.Util;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.vector.Vector3d;
-import net.minecraft.util.text.ITextComponent;
-import net.minecraft.world.World;
-import net.minecraft.world.server.ServerWorld;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.api.distmarker.OnlyIn;
-import net.minecraftforge.common.ForgeHooks;
-import net.minecraftforge.common.capabilities.ICapabilityProvider;
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.ai.attributes.Attribute;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.ItemStack.TooltipPart;
+import net.minecraft.world.item.Rarity;
+import net.minecraft.world.item.TooltipFlag;
+import net.minecraft.world.item.enchantment.Enchantment;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraftforge.client.IItemRenderProperties;
+import net.minecraftforge.common.ToolAction;
+import net.minecraftforge.common.ToolActions;
 
-public class ItemAtomicDisassembler extends ItemEnergized implements IItemHUDProvider, IModeItem, IRadialModeItem<DisassemblerMode> {
+public class ItemAtomicDisassembler extends ItemEnergized implements IItemHUDProvider, IRadialModeItem<DisassemblerMode> {
+
+    //All basic dig actions except shears
+    public static final Set<ToolAction> ALWAYS_SUPPORTED_ACTIONS = Set.of(ToolActions.AXE_DIG, ToolActions.HOE_DIG, ToolActions.SHOVEL_DIG, ToolActions.PICKAXE_DIG,
+          ToolActions.SWORD_DIG);
 
     private final Multimap<Attribute, AttributeModifier> attributes;
 
     public ItemAtomicDisassembler(Properties properties) {
-        super(MekanismConfig.gear.disassemblerChargeRate, MekanismConfig.gear.disassemblerMaxEnergy, properties.rarity(Rarity.RARE).setNoRepair().setISTER(ISTERProvider::disassembler));
+        super(MekanismConfig.gear.disassemblerChargeRate, MekanismConfig.gear.disassemblerMaxEnergy, properties.rarity(Rarity.RARE).setNoRepair());
         Builder<Attribute, AttributeModifier> builder = ImmutableMultimap.builder();
-        builder.put(Attributes.ATTACK_SPEED, new AttributeModifier(ATTACK_SPEED_MODIFIER, "Weapon modifier", -2.4D, Operation.ADDITION));
+        builder.put(Attributes.ATTACK_SPEED, new AttributeModifier(BASE_ATTACK_SPEED_UUID, "Weapon modifier", -2.4D, Operation.ADDITION));
         this.attributes = builder.build();
     }
 
     @Override
-    public boolean canHarvestBlock(@Nonnull BlockState state) {
+    public void initializeClient(@Nonnull Consumer<IItemRenderProperties> consumer) {
+        consumer.accept(RenderPropertiesProvider.disassembler());
+    }
+
+    @Override
+    public boolean isCorrectToolForDrops(@Nonnull BlockState state) {
         //Allow harvesting everything, things that are unbreakable are caught elsewhere
         return true;
     }
 
     @Override
-    @OnlyIn(Dist.CLIENT)
-    public void addInformation(@Nonnull ItemStack stack, @Nullable World world, @Nonnull List<ITextComponent> tooltip, @Nonnull ITooltipFlag flag) {
-        super.addInformation(stack, world, tooltip, flag);
+    public void appendHoverText(@Nonnull ItemStack stack, @Nullable Level world, @Nonnull List<Component> tooltip, @Nonnull TooltipFlag flag) {
+        super.appendHoverText(stack, world, tooltip, flag);
         DisassemblerMode mode = getMode(stack);
         tooltip.add(MekanismLang.MODE.translateColored(EnumColor.INDIGO, mode));
         tooltip.add(MekanismLang.DISASSEMBLER_EFFICIENCY.translateColored(EnumColor.INDIGO, mode.getEfficiency()));
     }
 
     @Override
-    public boolean hitEntity(@Nonnull ItemStack stack, @Nonnull LivingEntity target, @Nonnull LivingEntity attacker) {
+    public boolean canPerformAction(ItemStack stack, ToolAction action) {
+        return ALWAYS_SUPPORTED_ACTIONS.contains(action);
+    }
+
+    @Override
+    public boolean onLeftClickEntity(@Nonnull ItemStack stack, @Nonnull Player player, @Nonnull Entity target) {
+        //If it is a vehicle that we want to damage
+        if (target.getType().is(MekanismTags.Entities.HURTABLE_VEHICLES)) {
+            if (target.isAttackable() && !target.skipAttackInteraction(player)) {
+                //Always apply max damage to vehicles that can be hurt regardless of energy and don't actually
+                target.hurt(DamageSource.playerAttack(player), MekanismConfig.gear.disassemblerMaxDamage.get());
+                //Note: We fall through and call super regardless so any other processing that may need to happen, happens,
+                // this is similar to how we return super from hurtEnemy
+            }
+        }
+        return super.onLeftClickEntity(stack, player, target);
+    }
+
+    @Override
+    public boolean hurtEnemy(@Nonnull ItemStack stack, @Nonnull LivingEntity target, @Nonnull LivingEntity attacker) {
         IEnergyContainer energyContainer = StorageUtils.getEnergyContainer(stack, 0);
         FloatingLong energy = energyContainer == null ? FloatingLong.ZERO : energyContainer.getEnergy();
         FloatingLong energyCost = MekanismConfig.gear.disassemblerEnergyUsageWeapon.get();
@@ -109,132 +125,75 @@ public class ItemAtomicDisassembler extends ItemEnergized implements IItemHUDPro
             percent = energy.divideToLevel(energyCost);
         }
         float damage = (float) (minDamage + damageDifference * percent);
-        if (attacker instanceof PlayerEntity) {
-            target.attackEntityFrom(DamageSource.causePlayerDamage((PlayerEntity) attacker), damage);
+        if (attacker instanceof Player player) {
+            target.hurt(DamageSource.playerAttack(player), damage);
         } else {
-            target.attackEntityFrom(DamageSource.causeMobDamage(attacker), damage);
+            target.hurt(DamageSource.mobAttack(attacker), damage);
         }
         if (energyContainer != null && !energy.isZero()) {
             energyContainer.extract(energyCost, Action.EXECUTE, AutomationType.MANUAL);
         }
-        return false;
+        return super.hurtEnemy(stack, target, attacker);
     }
 
     @Override
     public float getDestroySpeed(@Nonnull ItemStack stack, @Nonnull BlockState state) {
         IEnergyContainer energyContainer = StorageUtils.getEnergyContainer(stack, 0);
-        return energyContainer == null || energyContainer.isEmpty() ? 1 : getMode(stack).getEfficiency();
+        if (energyContainer == null) {
+            return 0;
+        }
+        //Use raw hardness to get the best guess of if it is zero or not
+        FloatingLong energyRequired = getDestroyEnergy(stack, state.destroySpeed);
+        FloatingLong energyAvailable = energyContainer.extract(energyRequired, Action.SIMULATE, AutomationType.MANUAL);
+        if (energyAvailable.smallerThan(energyRequired)) {
+            //If we can't extract all the energy we need to break it go at base speed reduced by how much we actually have available
+            return DisassemblerMode.NORMAL.getEfficiency() * energyAvailable.divide(energyRequired).floatValue();
+        }
+        return getMode(stack).getEfficiency();
     }
 
     @Override
-    public boolean onBlockDestroyed(@Nonnull ItemStack stack, @Nonnull World world, @Nonnull BlockState state, @Nonnull BlockPos pos, @Nonnull LivingEntity entityliving) {
+    public boolean mineBlock(@Nonnull ItemStack stack, @Nonnull Level world, @Nonnull BlockState state, @Nonnull BlockPos pos, @Nonnull LivingEntity entityliving) {
         IEnergyContainer energyContainer = StorageUtils.getEnergyContainer(stack, 0);
         if (energyContainer != null) {
-            energyContainer.extract(getDestroyEnergy(stack, state.getBlockHardness(world, pos)), Action.EXECUTE, AutomationType.MANUAL);
+            energyContainer.extract(getDestroyEnergy(stack, state.getDestroySpeed(world, pos)), Action.EXECUTE, AutomationType.MANUAL);
         }
         return true;
     }
 
     @Override
-    public boolean onBlockStartBreak(ItemStack stack, BlockPos pos, PlayerEntity player) {
-        World world = player.world;
-        if (!world.isRemote && !player.isCreative()) {
-            IEnergyContainer energyContainer = StorageUtils.getEnergyContainer(stack, 0);
-            if (energyContainer == null) {
-                //If something went wrong and we don't have an energy container, just go to super
-                return super.onBlockStartBreak(stack, pos, player);
-            }
-            DisassemblerMode mode = getMode(stack);
-            boolean extended = mode == DisassemblerMode.EXTENDED_VEIN;
-            if (extended || mode == DisassemblerMode.VEIN) {
-                BlockState state = world.getBlockState(pos);
-                if (state.getBlock() instanceof BlockBounding) {
-                    //Even though we now handle breaking bounding blocks properly, don't allow vein mining
-                    // them as an added safety measure
-                    return super.onBlockStartBreak(stack, pos, player);
-                }
-                //If it is extended or should be treated as an ore
-                if (extended || state.isIn(MekanismTags.Blocks.ATOMIC_DISASSEMBLER_ORE)) {
-                    ServerPlayerEntity serverPlayerEntity = (ServerPlayerEntity) player;
-                    List<BlockPos> found = findPositions(state, pos, world, extended ? MekanismConfig.gear.disassemblerMiningRange.get() : -1);
-                    for (BlockPos foundPos : found) {
-                        if (pos.equals(foundPos)) {
-                            continue;
-                        }
-                        BlockState foundState = world.getBlockState(foundPos);
-                        FloatingLong destroyEnergy = getDestroyEnergy(stack, foundState.getBlockHardness(world, foundPos));
-                        if (energyContainer.extract(destroyEnergy, Action.SIMULATE, AutomationType.MANUAL).smallerThan(destroyEnergy)) {
-                            //If we don't have energy to break the block continue
-                            //Note: We do not break as given the energy scales with hardness, so it is possible we still have energy to break another block
-                            // Given we validate the blocks are the same but their block states may be different thus making them have different
-                            // block hardness values in a modded context
-                            continue;
-                        }
-                        int exp = ForgeHooks.onBlockBreakEvent(world, serverPlayerEntity.interactionManager.getGameType(), serverPlayerEntity, foundPos);
-                        if (exp == -1) {
-                            //If we can't actually break the block continue (this allows mods to stop us from vein mining into protected land)
-                            continue;
-                        }
-                        //Otherwise break the block
-                        Block block = foundState.getBlock();
-                        //Get the tile now so that we have it for when we try to harvest the block
-                        TileEntity tileEntity = WorldUtils.getTileEntity(world, foundPos);
-                        //Remove the block
-                        boolean removed = foundState.removedByPlayer(world, foundPos, player, true, foundState.getFluidState());
-                        if (removed) {
-                            block.onPlayerDestroy(world, foundPos, foundState);
-                            //Harvest the block allowing it to handle block drops, incrementing block mined count, and adding exhaustion
-                            block.harvestBlock(world, player, foundPos, foundState, tileEntity, stack);
-                            player.addStat(Stats.ITEM_USED.get(this));
-                            if (exp > 0) {
-                                //If we have xp drop it
-                                block.dropXpOnBlockBreak((ServerWorld) world, foundPos, exp);
-                            }
-                            //Use energy
-                            energyContainer.extract(destroyEnergy, Action.EXECUTE, AutomationType.MANUAL);
-                        }
-                    }
+    public boolean onBlockStartBreak(ItemStack stack, BlockPos pos, Player player) {
+        if (player.level.isClientSide || player.isCreative()) {
+            return super.onBlockStartBreak(stack, pos, player);
+        }
+        IEnergyContainer energyContainer = StorageUtils.getEnergyContainer(stack, 0);
+        if (energyContainer != null && getMode(stack) == DisassemblerMode.VEIN) {
+            Level world = player.level;
+            BlockState state = world.getBlockState(pos);
+            FloatingLong baseDestroyEnergy = getDestroyEnergy(stack);
+            FloatingLong energyRequired = getDestroyEnergy(baseDestroyEnergy, state.getDestroySpeed(world, pos));
+            if (energyContainer.extract(energyRequired, Action.SIMULATE, AutomationType.MANUAL).greaterOrEqual(energyRequired)) {
+                // Only allow mining things that are considered an ore
+                if (ModuleVeinMiningUnit.canVeinBlock(state) && state.is(MekanismTags.Blocks.ATOMIC_DISASSEMBLER_ORE)) {
+                    Object2IntMap<BlockPos> found = ModuleVeinMiningUnit.findPositions(world, Map.of(pos, state), 0, Object2BooleanMaps.singleton(state.getBlock(), true));
+                    MekanismUtils.veinMineArea(energyContainer, energyRequired, world, pos, (ServerPlayer) player, stack, this, found, hardness -> FloatingLong.ZERO,
+                          (hardness, distance, bs) -> getDestroyEnergy(baseDestroyEnergy, hardness).multiply(0.5 * Math.pow(distance, 1.5)));
                 }
             }
         }
         return super.onBlockStartBreak(stack, pos, player);
     }
 
-    private static List<BlockPos> findPositions(BlockState state, BlockPos location, World world, int maxRange) {
-        List<BlockPos> found = new ArrayList<>();
-        Set<BlockPos> checked = new ObjectOpenHashSet<>();
-        found.add(location);
-        Block startBlock = state.getBlock();
-        int maxCount = MekanismConfig.gear.disassemblerMiningCount.get() - 1;
-        for (int i = 0; i < found.size(); i++) {
-            BlockPos blockPos = found.get(i);
-            checked.add(blockPos);
-            for (BlockPos pos : BlockPos.getAllInBoxMutable(blockPos.add(-1, -1, -1), blockPos.add(1, 1, 1))) {
-                //We can check contains as mutable
-                if (!checked.contains(pos)) {
-                    if (maxRange == -1 || WorldUtils.distanceBetween(location, pos) <= maxRange) {
-                        Optional<BlockState> blockState = WorldUtils.getBlockState(world, pos);
-                        if (blockState.isPresent() && startBlock == blockState.get().getBlock()) {
-                            //Make sure to add it as immutable
-                            found.add(pos.toImmutable());
-                            //Note: We do this for all blocks we find/attempt to mine, not just ones we do mine, as it is a bit simpler
-                            // and also represents those blocks getting checked by the vein mining for potentially being able to be mined
-                            Mekanism.packetHandler.sendToAllTracking(new PacketLightningRender(LightningPreset.TOOL_AOE, Objects.hash(blockPos, pos),
-                                  Vector3d.copyCentered(blockPos), Vector3d.copyCentered(pos), 10), world, blockPos);
-                            if (found.size() > maxCount) {
-                                return found;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        return found;
+    private FloatingLong getDestroyEnergy(ItemStack itemStack, float hardness) {
+        return getDestroyEnergy(getDestroyEnergy(itemStack), hardness);
     }
 
-    private FloatingLong getDestroyEnergy(ItemStack itemStack, float hardness) {
-        FloatingLong destroyEnergy = MekanismConfig.gear.disassemblerEnergyUsage.get().multiply(getMode(itemStack).getEfficiency());
-        return hardness == 0 ? destroyEnergy.divide(2) : destroyEnergy;
+    private FloatingLong getDestroyEnergy(FloatingLong baseDestroyEnergy, float hardness) {
+        return hardness == 0 ? baseDestroyEnergy.divide(2) : baseDestroyEnergy;
+    }
+
+    private FloatingLong getDestroyEnergy(ItemStack itemStack) {
+        return MekanismConfig.gear.disassemblerEnergyUsage.get().multiply(getMode(itemStack).getEfficiency());
     }
 
     @Override
@@ -248,7 +207,7 @@ public class ItemAtomicDisassembler extends ItemEnergized implements IItemHUDPro
     }
 
     @Override
-    public void setMode(ItemStack stack, PlayerEntity player, DisassemblerMode mode) {
+    public void setMode(ItemStack stack, Player player, DisassemblerMode mode) {
         ItemDataUtils.setInt(stack, NBTConstants.MODE, mode.ordinal());
     }
 
@@ -259,44 +218,40 @@ public class ItemAtomicDisassembler extends ItemEnergized implements IItemHUDPro
 
     @Nonnull
     @Override
-    public Multimap<Attribute, AttributeModifier> getAttributeModifiers(@Nonnull EquipmentSlotType slot, @Nonnull ItemStack stack) {
-        return slot == EquipmentSlotType.MAINHAND ? attributes : super.getAttributeModifiers(slot, stack);
+    public Multimap<Attribute, AttributeModifier> getAttributeModifiers(@Nonnull EquipmentSlot slot, @Nonnull ItemStack stack) {
+        return slot == EquipmentSlot.MAINHAND ? attributes : super.getAttributeModifiers(slot, stack);
     }
 
     @Override
-    public void addHUDStrings(List<ITextComponent> list, ItemStack stack, EquipmentSlotType slotType) {
+    public void addHUDStrings(List<Component> list, Player player, ItemStack stack, EquipmentSlot slotType) {
         DisassemblerMode mode = getMode(stack);
         list.add(MekanismLang.MODE.translateColored(EnumColor.GRAY, EnumColor.INDIGO, mode));
         list.add(MekanismLang.DISASSEMBLER_EFFICIENCY.translateColored(EnumColor.GRAY, EnumColor.INDIGO, mode.getEfficiency()));
     }
 
     @Override
-    public void changeMode(@Nonnull PlayerEntity player, @Nonnull ItemStack stack, int shift, boolean displayChangeMessage) {
+    public void changeMode(@Nonnull Player player, @Nonnull ItemStack stack, int shift, boolean displayChangeMessage) {
         DisassemblerMode mode = getMode(stack);
         DisassemblerMode newMode = mode.adjust(shift);
         if (mode != newMode) {
             setMode(stack, player, newMode);
             if (displayChangeMessage) {
-                player.sendMessage(MekanismLang.LOG_FORMAT.translateColored(EnumColor.DARK_BLUE, MekanismLang.MEKANISM, EnumColor.GRAY,
-                      MekanismLang.DISASSEMBLER_MODE_CHANGE.translate(EnumColor.INDIGO, newMode, EnumColor.AQUA, newMode.getEfficiency())), Util.DUMMY_UUID);
+                player.sendSystemMessage(MekanismUtils.logFormat(MekanismLang.DISASSEMBLER_MODE_CHANGE.translate(EnumColor.INDIGO, newMode, EnumColor.AQUA,
+                      newMode.getEfficiency())));
             }
         }
     }
 
     @Nonnull
     @Override
-    public ITextComponent getScrollTextComponent(@Nonnull ItemStack stack) {
+    public Component getScrollTextComponent(@Nonnull ItemStack stack) {
         DisassemblerMode mode = getMode(stack);
         return MekanismLang.GENERIC_WITH_PARENTHESIS.translateColored(EnumColor.INDIGO, mode, EnumColor.AQUA, mode.getEfficiency());
     }
 
     @Override
-    public ICapabilityProvider initCapabilities(ItemStack stack, @Nullable CompoundNBT nbt) {
-        if (stack.getTag() == null) {
-            stack.setTag(new CompoundNBT());
-        }
-        stack.getTag().putInt("HideFlags", 2);
-        return super.initCapabilities(stack, nbt);
+    public int getDefaultTooltipHideFlags(@Nonnull ItemStack stack) {
+        return super.getDefaultTooltipHideFlags(stack) | TooltipPart.MODIFIERS.getMask();
     }
 
     @Override
@@ -319,7 +274,6 @@ public class ItemAtomicDisassembler extends ItemEnergized implements IItemHUDPro
         SLOW(MekanismLang.DISASSEMBLER_SLOW, 8, MekanismConfig.gear.disassemblerSlowMode, EnumColor.BRIGHT_GREEN, MekanismUtils.getResource(MekanismUtils.ResourceType.GUI, "disassembler_slow.png")),
         FAST(MekanismLang.DISASSEMBLER_FAST, 128, MekanismConfig.gear.disassemblerFastMode, EnumColor.BRIGHT_GREEN, MekanismUtils.getResource(MekanismUtils.ResourceType.GUI, "disassembler_fast.png")),
         VEIN(MekanismLang.DISASSEMBLER_VEIN, 20, MekanismConfig.gear.disassemblerVeinMining, EnumColor.BRIGHT_GREEN, MekanismUtils.getResource(MekanismUtils.ResourceType.GUI, "disassembler_vein.png")),
-        EXTENDED_VEIN(MekanismLang.DISASSEMBLER_EXTENDED_VEIN, 20, MekanismConfig.gear.disassemblerExtendedMining, EnumColor.BRIGHT_GREEN, MekanismUtils.getResource(MekanismUtils.ResourceType.GUI, "disassembler_extended_vein.png")),
         OFF(MekanismLang.DISASSEMBLER_OFF, 0, () -> true, EnumColor.BRIGHT_GREEN, MekanismUtils.getResource(MekanismUtils.ResourceType.GUI, "void.png"));
 
         private static final DisassemblerMode[] MODES = values();
@@ -354,12 +308,12 @@ public class ItemAtomicDisassembler extends ItemEnergized implements IItemHUDPro
         }
 
         @Override
-        public ITextComponent getTextComponent() {
+        public Component getTextComponent() {
             return langEntry.translate(color);
         }
 
         @Override
-        public ITextComponent getShortText() {
+        public Component getShortText() {
             return getTextComponent();
         }
 

@@ -1,10 +1,10 @@
 package mekanism.tools.common.material;
 
 import javax.annotation.Nonnull;
-import net.minecraft.item.IItemTier;
-import net.minecraft.item.crafting.Ingredient;
+import net.minecraft.world.item.Tier;
+import net.minecraft.world.item.crafting.Ingredient;
 
-abstract class IItemTierHelper implements IItemTier {
+abstract class IItemTierHelper implements Tier {
 
     public abstract int getItemEnchantability();
 
@@ -18,7 +18,7 @@ abstract class IItemTierHelper implements IItemTier {
      * BaseMekanismMaterial}
      */
     @Override
-    public int getEnchantability() {
+    public int getEnchantmentValue() {
         return getItemEnchantability();
     }
 
@@ -31,7 +31,7 @@ abstract class IItemTierHelper implements IItemTier {
      */
     @Nonnull
     @Override
-    public Ingredient getRepairMaterial() {
+    public Ingredient getRepairIngredient() {
         return getItemRepairMaterial();
     }
 }

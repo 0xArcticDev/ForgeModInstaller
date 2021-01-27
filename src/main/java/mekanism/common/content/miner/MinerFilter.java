@@ -4,55 +4,73 @@ import javax.annotation.Nonnull;
 import mekanism.api.NBTConstants;
 import mekanism.common.content.filter.BaseFilter;
 import mekanism.common.util.NBTUtils;
-import net.minecraft.block.BlockState;
-import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.CompoundNBT;
-import net.minecraft.network.PacketBuffer;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraftforge.registries.ForgeRegistries;
 
 public abstract class MinerFilter<FILTER extends MinerFilter<FILTER>> extends BaseFilter<FILTER> {
 
-    public ItemStack replaceStack = ItemStack.EMPTY;
+    public Item replaceTarget = Items.AIR;
+    public boolean requiresReplacement;
 
-    public boolean requireStack;
+    protected MinerFilter() {
+    }
 
-    public boolean replaceStackMatches(@Nonnull ItemStack stack) {
-        //TODO: Should this be ItemHandlerHelper.canItemStacksStack() instead of isItemEqual
-        // Potentially this should be be a "fuzzy" style thing as sometimes the player may want the NBT to match and other times they may not
-        return !replaceStack.isEmpty() && !stack.isEmpty() && stack.isItemEqual(replaceStack);
+    protected MinerFilter(FILTER filter) {
+        replaceTarget = filter.replaceTarget;
+        requiresReplacement = filter.requiresReplacement;
+    }
+
+    public boolean replaceTargetMatches(@Nonnull Item target) {
+        return replaceTarget != Items.AIR && replaceTarget == target;
     }
 
     public abstract boolean canFilter(BlockState state);
 
+    public abstract boolean hasBlacklistedElement();
+
     @Override
-    public CompoundNBT write(CompoundNBT nbtTags) {
+    public CompoundTag write(CompoundTag nbtTags) {
         super.write(nbtTags);
-        nbtTags.putBoolean(NBTConstants.REQUIRE_STACK, requireStack);
-        if (!replaceStack.isEmpty()) {
-            nbtTags.put(NBTConstants.REPLACE_STACK, replaceStack.write(new CompoundNBT()));
+        nbtTags.putBoolean(NBTConstants.REQUIRE_STACK, requiresReplacement);
+        if (replaceTarget != Items.AIR) {
+            NBTUtils.writeRegistryEntry(nbtTags, NBTConstants.REPLACE_STACK, ForgeRegistries.ITEMS, replaceTarget);
         }
         return nbtTags;
     }
 
     @Override
-    public void read(CompoundNBT nbtTags) {
-        requireStack = nbtTags.getBoolean(NBTConstants.REQUIRE_STACK);
-        NBTUtils.setItemStackIfPresent(nbtTags, NBTConstants.REPLACE_STACK, stack -> replaceStack = stack);
+    public void read(CompoundTag nbtTags) {
+        requiresReplacement = nbtTags.getBoolean(NBTConstants.REQUIRE_STACK);
+        replaceTarget = NBTUtils.readRegistryEntry(nbtTags, NBTConstants.REPLACE_STACK, ForgeRegistries.ITEMS, Items.AIR);
     }
 
     @Override
-    public void write(PacketBuffer buffer) {
+    public void write(FriendlyByteBuf buffer) {
         super.write(buffer);
-        buffer.writeBoolean(requireStack);
-        buffer.writeItemStack(replaceStack);
+        buffer.writeBoolean(requiresReplacement);
+        buffer.writeRegistryId(ForgeRegistries.ITEMS, replaceTarget);
     }
 
     @Override
-    public void read(PacketBuffer dataStream) {
-        requireStack = dataStream.readBoolean();
-        replaceStack = dataStream.readItemStack();
+    public void read(FriendlyByteBuf dataStream) {
+        requiresReplacement = dataStream.readBoolean();
+        replaceTarget = dataStream.readRegistryIdSafe(Item.class);
     }
 
-    public abstract boolean equals(Object filter);
+    @Override
+    public int hashCode() {
+        int code = 1;
+        code = 31 * code + replaceTarget.hashCode();
+        code = 31 * code + (requiresReplacement ? 1 : 0);
+        return code;
+    }
 
-    public abstract int hashCode();
+    @Override
+    public boolean equals(Object o) {
+        return o instanceof MinerFilter<?> filter && filter.requiresReplacement == requiresReplacement && filter.replaceTarget == replaceTarget;
+    }
 }

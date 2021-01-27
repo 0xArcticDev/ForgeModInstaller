@@ -1,7 +1,5 @@
 package mekanism.api.chemical.attribute;
 
-import java.util.Arrays;
-import java.util.HashSet;
 import java.util.Set;
 import mekanism.api.chemical.Chemical;
 import mekanism.api.chemical.ChemicalStack;
@@ -21,27 +19,29 @@ public interface ChemicalAttributeValidator {
     boolean validate(ChemicalAttribute attribute);
 
     /**
-     * Determines if a Chemical is considered valid from a provided attribute validator.
+     * Determines if a Chemical is considered valid for this validator.
      *
-     * @param chemical  chemical to test
-     * @param validator validator to use
+     * @param chemical chemical to test
      *
      * @return if the chemical is valid
+     *
+     * @since 10.2.3
      */
-    static boolean process(Chemical<?> chemical, ChemicalAttributeValidator validator) {
-        return chemical.getAttributes().stream().allMatch(validator::validate);
+    default boolean process(Chemical<?> chemical) {
+        return chemical.getAttributes().stream().allMatch(this::validate);
     }
 
     /**
-     * Determines if a ChemicalStack is considered valid from a provided attribute validator.
+     * Determines if a ChemicalStack is considered valid for this validator.
      *
-     * @param stack     stack to test
-     * @param validator validator to use
+     * @param stack stack to test
      *
      * @return if the stack is valid
+     *
+     * @since 10.2.3
      */
-    static boolean process(ChemicalStack<?> stack, ChemicalAttributeValidator validator) {
-        return process(stack.getType(), validator);
+    default boolean process(ChemicalStack<?> stack) {
+        return process(stack.getType());
     }
 
     /**
@@ -74,7 +74,7 @@ public interface ChemicalAttributeValidator {
         private final boolean allowNoValidation;
 
         SimpleAttributeValidator(Class<? extends ChemicalAttribute>[] attributeTypes, boolean allowNoValidation) {
-            this.validTypes = new HashSet<>(Arrays.asList(attributeTypes));
+            this.validTypes = Set.of(attributeTypes);
             this.allowNoValidation = allowNoValidation;
         }
 

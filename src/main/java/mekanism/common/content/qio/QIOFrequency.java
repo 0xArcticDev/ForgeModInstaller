@@ -1,44 +1,53 @@
 package mekanism.common.content.qio;
 
-import com.google.common.collect.BiMap;
-import com.google.common.collect.HashBiMap;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.SetMultimap;
 import it.unimi.dsi.fastutil.objects.Object2LongMap;
+import it.unimi.dsi.fastutil.objects.Object2LongMaps;
 import it.unimi.dsi.fastutil.objects.Object2LongOpenHashMap;
-import java.text.NumberFormat;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.ObjLongConsumer;
+import java.util.function.Supplier;
 import javax.annotation.Nullable;
+import mekanism.api.Action;
 import mekanism.api.NBTConstants;
+import mekanism.api.inventory.qio.IQIOFrequency;
+import mekanism.api.math.MathUtils;
 import mekanism.api.text.EnumColor;
 import mekanism.common.CommonWorldTickHandler;
 import mekanism.common.Mekanism;
 import mekanism.common.base.TagCache;
 import mekanism.common.content.qio.QIODriveData.QIODriveKey;
 import mekanism.common.inventory.container.QIOItemViewerContainer;
-import mekanism.common.lib.BiMultimap;
 import mekanism.common.lib.WildcardMatcher;
+import mekanism.common.lib.collection.BiMultimap;
 import mekanism.common.lib.frequency.Frequency;
 import mekanism.common.lib.frequency.FrequencyType;
+import mekanism.common.lib.frequency.IColorableFrequency;
 import mekanism.common.lib.inventory.HashedItem;
 import mekanism.common.lib.inventory.HashedItem.UUIDAwareHashedItem;
-import mekanism.common.network.PacketQIOItemViewerGuiSync;
+import mekanism.common.network.to_client.PacketQIOItemViewerGuiSync;
+import mekanism.common.util.MekanismUtils;
 import mekanism.common.util.NBTUtils;
-import net.minecraft.entity.player.ServerPlayerEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.CompoundNBT;
-import net.minecraft.network.PacketBuffer;
-import net.minecraft.tileentity.TileEntity;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.entity.BlockEntity;
 
-public class QIOFrequency extends Frequency {
+public class QIOFrequency extends Frequency implements IColorableFrequency, IQIOFrequency {
 
-    public static final NumberFormat intFormatter = NumberFormat.getIntegerInstance();
     private static final Random rand = new Random();
 
     private final Map<QIODriveKey, QIODriveData> driveMap = new LinkedHashMap<>();
@@ -46,13 +55,19 @@ public class QIOFrequency extends Frequency {
     private final Set<IQIODriveHolder> driveHolders = new HashSet<>();
     // efficiently keep track of the tags utilized by the items stored
     private final BiMultimap<String, HashedItem> tagLookupMap = new BiMultimap<>();
-    //Keep track of a UUID for each hashed item
-    private final BiMap<HashedItem, UUID> itemTypeLookup = HashBiMap.create();
+    // efficiently keep track of the modids utilized by the items stored
+    private final Map<String, Set<HashedItem>> modIDLookupMap = new HashMap<>();
+    // efficiently keep track of the items for use in fuzzy lookup utilized by the items stored
+    private final Map<Item, Set<HashedItem>> fuzzyItemLookupMap = new HashMap<>();
     // a sensitive cache for wildcard tag lookups (wildcard -> [matching tags])
     private final SetMultimap<String, String> tagWildcardCache = HashMultimap.create();
+    private final Set<String> failedWildcardTags = new HashSet<>();
+    // a sensitive cache for wildcard modid lookups (wildcard -> [matching modids])
+    private final SetMultimap<String, String> modIDWildcardCache = HashMultimap.create();
+    private final Set<String> failedWildcardModIDs = new HashSet<>();
 
-    private final Set<UUIDAwareHashedItem> updatedItems = new HashSet<>();
-    private final Set<ServerPlayerEntity> playersViewingItems = new HashSet<>();
+    private final Set<UUID> updatedItems = new HashSet<>();
+    private final Set<ServerPlayer> playersViewingItems = new HashSet<>();
 
     /** If we need to send a packet to viewing clients with changed item data. */
     private boolean needsUpdate;
@@ -66,7 +81,10 @@ public class QIOFrequency extends Frequency {
 
     private EnumColor color = EnumColor.INDIGO;
 
-    public QIOFrequency(String n, UUID uuid) {
+    /**
+     * @param uuid Should only be null if we have incomplete data that we are loading
+     */
+    public QIOFrequency(String n, @Nullable UUID uuid) {
         super(FrequencyType.QIO, n, uuid);
     }
 
@@ -83,17 +101,41 @@ public class QIOFrequency extends Frequency {
         return itemDataMap;
     }
 
-    @Nullable
-    public HashedItem getTypeByUUID(@Nullable UUID uuid) {
-        return uuid == null ? null : itemTypeLookup.inverse().get(uuid);
+    @Override
+    public void forAllStored(ObjLongConsumer<ItemStack> consumer) {
+        itemDataMap.forEach((type, data) -> consumer.accept(type.createStack(1), data.getCount()));
     }
 
-    @Nullable
-    public UUID getUUIDForType(HashedItem item) {
-        return itemTypeLookup.get(item);
+    @Override
+    public long massInsert(ItemStack stack, long amount, Action action) {
+        if (stack.isEmpty() || amount <= 0) {
+            return 0;
+        }
+        HashedItem type = action.execute() ? HashedItem.create(stack) : HashedItem.raw(stack);
+        // these checks are extremely important; they prevent us from wasting CPU searching for a place to put the new items,
+        // and they also prevent us from adding a ghost type to the itemDataMap if nothing is inserted
+        if (totalCount == totalCountCapacity || (!itemDataMap.containsKey(type) && itemDataMap.size() == totalTypeCapacity)) {
+            return 0;
+        }
+        // at this point we're guaranteed at least part of the input stack will be inserted
+        QIOItemTypeData data;
+        if (action.execute()) {
+            data = itemDataMap.computeIfAbsent(type, this::createTypeDataForAbsent);
+        } else {
+            //If we are simulating, look it up
+            data = itemDataMap.get(type);
+            if (data == null) {
+                // if it doesn't already have that type, fall back to a new item type data that doesn't actually get added
+                data = new QIOItemTypeData(type);
+            }
+        }
+        return amount - data.add(amount, action);
     }
 
     public ItemStack addItem(ItemStack stack) {
+        if (stack.isEmpty()) {
+            return ItemStack.EMPTY;
+        }
         HashedItem type = HashedItem.create(stack);
         // these checks are extremely important; they prevent us from wasting CPU searching for a place to put the new items,
         // and they also prevent us from adding a ghost type to the itemDataMap if nothing is inserted
@@ -101,13 +143,52 @@ public class QIOFrequency extends Frequency {
             return stack;
         }
         // at this point we're guaranteed at least part of the input stack will be inserted
-        QIOItemTypeData data = itemDataMap.computeIfAbsent(type, t -> {
-            tagLookupMap.putAll(TagCache.getItemTags(stack), t);
-            tagWildcardCache.clear();
-            itemTypeLookup.put(t, UUID.randomUUID());
-            return new QIOItemTypeData(t);
-        });
-        return type.createStack((int) data.add(stack.getCount()));
+        QIOItemTypeData data = itemDataMap.computeIfAbsent(type, this::createTypeDataForAbsent);
+        return type.createStack(MathUtils.clampToInt(data.add(stack.getCount(), Action.EXECUTE)));
+    }
+
+    private QIOItemTypeData createTypeDataForAbsent(HashedItem type) {
+        ItemStack stack = type.getStack();
+        List<String> tags = TagCache.getItemTags(stack);
+        if (!tags.isEmpty()) {
+            boolean hasAllKeys = tagLookupMap.hasAllKeys(tags);
+            if (tagLookupMap.putAll(tags, type) && !hasAllKeys) {
+                //If we added any tag item combinations, and we didn't have all the keys for tags this item has,
+                // then we need to clear our wildcard cache as our new tags may be valid for some of our wildcards
+                tagWildcardCache.clear();
+                failedWildcardTags.clear();
+            }
+        }
+        modIDLookupMap.computeIfAbsent(MekanismUtils.getModId(stack), modID -> {
+            //If we added a new modid to the lookup map we also want to make sure that we clear our modid wildcard cache
+            // as our new modid may be valid for some of our wildcards
+            modIDWildcardCache.clear();
+            failedWildcardModIDs.clear();
+            return new HashSet<>();
+        }).add(type);
+        //Fuzzy item lookup has no wildcard cache related to it
+        fuzzyItemLookupMap.computeIfAbsent(stack.getItem(), item -> new HashSet<>()).add(type);
+        //Ensure we have a matching uuid for this item
+        QIOGlobalItemLookup.INSTANCE.getOrTrackUUID(type);
+        return new QIOItemTypeData(type);
+    }
+
+    @Override
+    public long massExtract(ItemStack stack, long amount, Action action) {
+        if (amount <= 0 || stack.isEmpty() || itemDataMap.isEmpty()) {
+            return 0;
+        }
+        HashedItem type = HashedItem.raw(stack);
+        QIOItemTypeData data = itemDataMap.get(type);
+        if (data == null) {
+            return 0;
+        }
+        long removed = data.remove(amount, action);
+        // remove this item type if it's now empty
+        if (action.execute() && data.count == 0) {
+            removeItemData(data.itemType);
+        }
+        return removed;
     }
 
     public ItemStack removeItem(int amount) {
@@ -115,11 +196,14 @@ public class QIOFrequency extends Frequency {
     }
 
     public ItemStack removeItem(ItemStack stack, int amount) {
-        return removeByType(HashedItem.create(stack), amount);
+        if (stack.isEmpty()) {
+            return ItemStack.EMPTY;
+        }
+        return removeByType(HashedItem.raw(stack), amount);
     }
 
     public ItemStack removeByType(@Nullable HashedItem itemType, int amount) {
-        if (itemDataMap.isEmpty()) {
+        if (itemDataMap.isEmpty() || amount <= 0) {
             return ItemStack.EMPTY;
         }
 
@@ -138,54 +222,151 @@ public class QIOFrequency extends Frequency {
         ItemStack removed = data.remove(amount);
         // remove this item type if it's now empty
         if (data.count == 0) {
-            itemDataMap.remove(data.itemType);
-            tagLookupMap.removeValue(data.itemType);
-            itemTypeLookup.remove(data.itemType);
-            tagWildcardCache.clear();
+            removeItemData(data.itemType);
         }
         return removed;
     }
 
-    public Object2LongMap<HashedItem> getStacksByTag(String tag) {
-        Set<HashedItem> items = tagLookupMap.getValues(tag);
-        Object2LongMap<HashedItem> ret = new Object2LongOpenHashMap<>();
-        items.forEach(item -> ret.put(item, getStored(item)));
-        return ret;
-    }
-
-    public Object2LongMap<HashedItem> getStacksByWildcard(String wildcard) {
-        if (!tagWildcardCache.containsKey(wildcard)) {
-            buildWildcardMapping(wildcard);
+    private void removeItemData(HashedItem type) {
+        itemDataMap.remove(type);
+        //Note: We need to copy the tags to a new collection as otherwise when we start removing them from the lookup
+        // they will also get removed from this view
+        Set<String> tags = new HashSet<>(tagLookupMap.getKeys(type));
+        if (tagLookupMap.removeValue(type) && !tagLookupMap.hasAllKeys(tags)) {
+            //If we completely removed any tags clear our wildcard cache as it may have some wildcards that are
+            // matching a tag that is no longer stored
+            tagWildcardCache.clear();
+            //Note: We don't need to clear the failed wildcard tags as if we are removing tags they still won't have any matches
         }
-        Set<String> matchingTags = tagWildcardCache.get(wildcard);
+        ItemStack stack = type.getStack();
+        String modID = MekanismUtils.getModId(stack);
+        Set<HashedItem> itemsForMod = modIDLookupMap.get(modID);
+        //In theory if we are removing an item, and it existed we should have a set corresponding to it,
+        // but double check that it is not null just in case
+        // Next if we removed the item successfully, check if the items for that mod is now empty, and if they are
+        // remove the modid from the lookup map, and clear our wildcard cache as it may have some wildcards that are
+        // matching a modid that is no longer stored
+        if (itemsForMod != null && itemsForMod.remove(type) && itemsForMod.isEmpty()) {
+            modIDLookupMap.remove(modID);
+            modIDWildcardCache.clear();
+            //Note: We don't need to clear the failed wildcard modids as if we are removing tags they still won't have any matches
+        }
+        Item item = stack.getItem();
+        Set<HashedItem> itemsByFuzzy = fuzzyItemLookupMap.get(item);
+        //In theory if we are removing an item, and it existed we should have a set corresponding to it,
+        // but double check that it is not null just in case
+        // Next if we removed the item successfully, check if the "fuzzy" items for that item is now empty, and if they are
+        // remove the item completely from the lookup map
+        if (itemsByFuzzy != null && itemsByFuzzy.remove(type) && itemsByFuzzy.isEmpty()) {
+            fuzzyItemLookupMap.remove(item);
+        }
+    }
+
+    public Set<HashedItem> getTypesForItem(Item item) {
+        return Collections.unmodifiableSet(fuzzyItemLookupMap.getOrDefault(item, Collections.emptySet()));
+    }
+
+    public Object2LongMap<HashedItem> getStacksByItem(Item item) {
+        return getStacksWithCounts(fuzzyItemLookupMap.get(item));
+    }
+
+    public Object2LongMap<HashedItem> getStacksByTag(String tag) {
+        return getStacksWithCounts(tagLookupMap.getValues(tag));
+    }
+
+    public Object2LongMap<HashedItem> getStacksByModID(String modID) {
+        return getStacksWithCounts(modIDLookupMap.get(modID));
+    }
+
+    private Object2LongMap<HashedItem> getStacksWithCounts(@Nullable Set<HashedItem> items) {
+        if (items == null || items.isEmpty()) {
+            return Object2LongMaps.emptyMap();
+        }
         Object2LongMap<HashedItem> ret = new Object2LongOpenHashMap<>();
-        matchingTags.forEach(tag -> ret.putAll(getStacksByTag(tag)));
+        for (HashedItem item : items) {
+            ret.put(item, getStored(item));
+        }
         return ret;
     }
 
-    private void buildWildcardMapping(String wildcard) {
-        for (String tag : tagLookupMap.getAllKeys()) {
-            if (WildcardMatcher.matches(wildcard, tag)) {
-                tagWildcardCache.put(wildcard, tag);
+    public Object2LongMap<HashedItem> getStacksByTagWildcard(String wildcard) {
+        if (hasMatchingElements(tagWildcardCache, failedWildcardTags, wildcard, tagLookupMap::getAllKeys)) {
+            Object2LongMap<HashedItem> ret = new Object2LongOpenHashMap<>();
+            for (String match : tagWildcardCache.get(wildcard)) {
+                for (HashedItem item : tagLookupMap.getValues(match)) {
+                    //If our return map doesn't already have the stored value in it, calculate it.
+                    // The case where it may have the stored value in it is if an item has multiple
+                    // tags that all match the wildcard
+                    ret.computeIfAbsent(item, (HashedItem type) -> getStored(type));
+                }
+            }
+            return ret;
+        }
+        return Object2LongMaps.emptyMap();
+    }
+
+    public Object2LongMap<HashedItem> getStacksByModIDWildcard(String wildcard) {
+        if (hasMatchingElements(modIDWildcardCache, failedWildcardModIDs, wildcard, modIDLookupMap::keySet)) {
+            Object2LongMap<HashedItem> ret = new Object2LongOpenHashMap<>();
+            for (String match : modIDWildcardCache.get(wildcard)) {
+                for (HashedItem item : modIDLookupMap.get(match)) {
+                    //Note: Unlike in getStacksByTagWildcard, we don't use computeLongIfAbsent here because
+                    // each stack only has one modid, so while we may have multiple modids that match our
+                    // wildcard, the stacks that correspond to said modids will be unique
+                    ret.put(item, getStored(item));
+                }
+            }
+            return ret;
+        }
+        return Object2LongMaps.emptyMap();
+    }
+
+    private boolean hasMatchingElements(SetMultimap<String, String> wildcardCache, Set<String> failedWildcards, String wildcard, Supplier<Set<String>> entriesSupplier) {
+        if (failedWildcards.contains(wildcard)) {
+            //If we already know this wildcard has no matching things, fail fast
+            return false;
+        }
+        //If we don't have a cached value for the given wildcard, try to build up the corresponding cache
+        if (!wildcardCache.containsKey(wildcard) && !buildWildcardMapping(wildcardCache, wildcard, entriesSupplier.get())) {
+            // If we don't actually have any matches, mark that the wildcard failed, and return false
+            failedWildcards.add(wildcard);
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * @return {@code true} if any wildcards were added.
+     */
+    private boolean buildWildcardMapping(SetMultimap<String, String> wildcardCache, String wildcard, Set<String> entries) {
+        boolean added = false;
+        for (String entry : entries) {
+            if (WildcardMatcher.matches(wildcard, entry)) {
+                added |= wildcardCache.put(wildcard, entry);
             }
         }
+        return added;
     }
 
-    public void openItemViewer(ServerPlayerEntity player) {
+    public void openItemViewer(ServerPlayer player) {
         playersViewingItems.add(player);
-        Object2LongMap<UUIDAwareHashedItem> map = new Object2LongOpenHashMap<>();
-        itemDataMap.values().forEach(d -> map.put(new UUIDAwareHashedItem(d.itemType, getUUIDForType(d.itemType)), d.count));
-        Mekanism.packetHandler.sendTo(PacketQIOItemViewerGuiSync.batch(map, totalCountCapacity, totalTypeCapacity), player);
+        Object2LongMap<UUIDAwareHashedItem> map = new Object2LongOpenHashMap<>(itemDataMap.size());
+        for (QIOItemTypeData data : itemDataMap.values()) {
+            map.put(new UUIDAwareHashedItem(data.itemType, QIOGlobalItemLookup.INSTANCE.getOrTrackUUID(data.itemType)), data.count);
+        }
+        Mekanism.packetHandler().sendTo(PacketQIOItemViewerGuiSync.batch(map, totalCountCapacity, totalTypeCapacity), player);
     }
 
-    public void closeItemViewer(ServerPlayerEntity player) {
+    public void closeItemViewer(ServerPlayer player) {
         playersViewingItems.remove(player);
     }
 
+    @Override
     public EnumColor getColor() {
         return color;
     }
 
+    @Override
     public void setColor(EnumColor color) {
         this.color = color;
     }
@@ -207,27 +388,46 @@ public class QIOFrequency extends Frequency {
         return totalTypeCapacity;
     }
 
+    @Override
+    public long getStored(ItemStack type) {
+        return getStored(HashedItem.raw(type));
+    }
+
     public long getStored(HashedItem itemType) {
         QIOItemTypeData data = itemDataMap.get(itemType);
-        return data != null ? data.count : 0;
+        return data == null ? 0 : data.count;
+    }
+
+    public boolean isStoring(HashedItem itemType) {
+        return getStored(itemType) > 0;
     }
 
     public QIODriveData getDriveData(QIODriveKey key) {
         return driveMap.get(key);
     }
 
+    /**
+     * This is mainly for use by things that need to do simulation, and should not have any of the values of the drive get changed directly.
+     */
+    public Collection<QIODriveData> getAllDrives() {
+        return driveMap.values();
+    }
+
     @Override
     public void tick() {
         super.tick();
         if (!updatedItems.isEmpty() || needsUpdate) {
-            Object2LongMap<UUIDAwareHashedItem> map = new Object2LongOpenHashMap<>();
-            updatedItems.forEach(type -> {
-                QIOItemTypeData data = itemDataMap.get(type);
-                map.put(type, data == null ? 0 : data.count);
+            Object2LongMap<UUIDAwareHashedItem> map = new Object2LongOpenHashMap<>(updatedItems.size());
+            updatedItems.forEach(uuid -> {
+                HashedItem type = QIOGlobalItemLookup.INSTANCE.getTypeByUUID(uuid);
+                if (type != null) {//The type should never be null as we create a UUID if there isn't one before adding but validate it
+                    QIOItemTypeData data = itemDataMap.get(type);
+                    map.put(new UUIDAwareHashedItem(type, uuid), data == null ? 0 : data.count);
+                }
             });
             // flush players that somehow didn't send a container close packet
-            playersViewingItems.removeIf(player -> !(player.openContainer instanceof QIOItemViewerContainer));
-            playersViewingItems.forEach(player -> Mekanism.packetHandler.sendTo(PacketQIOItemViewerGuiSync.update(map, totalCountCapacity, totalTypeCapacity), player));
+            playersViewingItems.removeIf(player -> !(player.containerMenu instanceof QIOItemViewerContainer));
+            playersViewingItems.forEach(player -> Mekanism.packetHandler().sendTo(PacketQIOItemViewerGuiSync.update(map, totalCountCapacity, totalTypeCapacity), player));
             updatedItems.clear();
             needsUpdate = false;
         }
@@ -241,6 +441,7 @@ public class QIOFrequency extends Frequency {
         }
 
         if (CommonWorldTickHandler.flushTagAndRecipeCaches) {
+            //Note: We only need to clear tags here as the modids cannot change just because a reload happened
             tagLookupMap.clear();
             tagWildcardCache.clear();
             itemDataMap.values().forEach(item -> tagLookupMap.putAll(TagCache.getItemTags(item.itemType.getStack()), item.itemType));
@@ -248,11 +449,10 @@ public class QIOFrequency extends Frequency {
     }
 
     @Override
-    public void onDeactivate(TileEntity tile) {
+    public void onDeactivate(BlockEntity tile) {
         super.onDeactivate(tile);
 
-        if (tile instanceof IQIODriveHolder) {
-            IQIODriveHolder holder = (IQIODriveHolder) tile;
+        if (tile instanceof IQIODriveHolder holder) {
             for (int i = 0; i < holder.getDriveSlots().size(); i++) {
                 QIODriveKey key = new QIODriveKey(holder, i);
                 removeDrive(key, true);
@@ -262,13 +462,10 @@ public class QIOFrequency extends Frequency {
     }
 
     @Override
-    public void update(TileEntity tile) {
+    public void update(BlockEntity tile) {
         super.update(tile);
-        if (tile instanceof IQIODriveHolder) {
-            IQIODriveHolder holder = (IQIODriveHolder) tile;
-            if (!driveHolders.contains(holder)) {
-                addHolder(holder);
-            }
+        if (tile instanceof IQIODriveHolder holder && !driveHolders.contains(holder)) {
+            addHolder(holder);
         }
     }
 
@@ -279,7 +476,7 @@ public class QIOFrequency extends Frequency {
         Set<QIODriveKey> keys = new HashSet<>(driveMap.keySet());
         keys.forEach(key -> removeDrive(key, false));
         driveMap.clear();
-        playersViewingItems.forEach(player -> Mekanism.packetHandler.sendTo(PacketQIOItemViewerGuiSync.kill(), player));
+        playersViewingItems.forEach(player -> Mekanism.packetHandler().sendTo(PacketQIOItemViewerGuiSync.kill(), player));
     }
 
     @Override
@@ -294,35 +491,35 @@ public class QIOFrequency extends Frequency {
     }
 
     @Override
-    public void write(PacketBuffer buf) {
+    public void write(FriendlyByteBuf buf) {
         super.write(buf);
         buf.writeVarLong(totalCount);
         buf.writeVarLong(totalCountCapacity);
         buf.writeVarInt(itemDataMap.size());
         buf.writeVarInt(totalTypeCapacity);
-        buf.writeEnumValue(color);
+        buf.writeEnum(color);
     }
 
     @Override
-    public void read(PacketBuffer buf) {
+    public void read(FriendlyByteBuf buf) {
         super.read(buf);
         totalCount = buf.readVarLong();
         totalCountCapacity = buf.readVarLong();
         clientTypes = buf.readVarInt();
         totalTypeCapacity = buf.readVarInt();
-        color = buf.readEnumValue(EnumColor.class);
+        setColor(buf.readEnum(EnumColor.class));
     }
 
     @Override
-    public void write(CompoundNBT nbtTags) {
+    public void write(CompoundTag nbtTags) {
         super.write(nbtTags);
-        nbtTags.putInt(NBTConstants.COLOR, color.ordinal());
+        NBTUtils.writeEnum(nbtTags, NBTConstants.COLOR, color);
     }
 
     @Override
-    protected void read(CompoundNBT nbtTags) {
+    protected void read(CompoundTag nbtTags) {
         super.read(nbtTags);
-        NBTUtils.setEnumIfPresent(nbtTags, NBTConstants.COLOR, EnumColor::byIndexStatic, value -> color = value);
+        NBTUtils.setEnumIfPresent(nbtTags, NBTConstants.COLOR, EnumColor::byIndexStatic, this::setColor);
     }
 
     public void addDrive(QIODriveKey key) {
@@ -337,13 +534,8 @@ public class QIOFrequency extends Frequency {
             totalTypeCapacity += data.getTypeCapacity();
             driveMap.put(key, data);
             data.getItemMap().forEach((storedKey, value) -> {
-                itemDataMap.computeIfAbsent(storedKey, e -> {
-                    tagWildcardCache.clear();
-                    tagLookupMap.putAll(TagCache.getItemTags(e.getStack()), e);
-                    itemTypeLookup.put(e, UUID.randomUUID());
-                    return new QIOItemTypeData(e);
-                }).addFromDrive(data, value);
-                updatedItems.add(new UUIDAwareHashedItem(storedKey, getUUIDForType(storedKey)));
+                itemDataMap.computeIfAbsent(storedKey, this::createTypeDataForAbsent).addFromDrive(data, value);
+                updatedItems.add(QIOGlobalItemLookup.INSTANCE.getUUIDForType(storedKey));
             });
             setNeedsUpdate();
         }
@@ -361,12 +553,11 @@ public class QIOFrequency extends Frequency {
                     itemData.containingDrives.remove(key);
                     itemData.count -= value;
                     totalCount -= value;
+                    updatedItems.add(QIOGlobalItemLookup.INSTANCE.getUUIDForType(storedKey));
                     // remove this entry from the item data map if it's now empty
                     if (itemData.containingDrives.isEmpty() || itemData.count == 0) {
-                        itemDataMap.remove(storedKey);
-                        tagWildcardCache.clear();
+                        removeItemData(storedKey);
                     }
-                    updatedItems.add(new UUIDAwareHashedItem(storedKey, getUUIDForType(storedKey)));
                 }
             });
             setNeedsUpdate();
@@ -398,7 +589,7 @@ public class QIOFrequency extends Frequency {
         needsUpdate = true;
         isDirty = true;
         if (changedItem != null) {
-            updatedItems.add(new UUIDAwareHashedItem(changedItem, getUUIDForType(changedItem)));
+            updatedItems.add(QIOGlobalItemLookup.INSTANCE.getUUIDForType(changedItem));
         }
     }
 
@@ -423,11 +614,11 @@ public class QIOFrequency extends Frequency {
             setNeedsUpdate();
         }
 
-        private long add(long amount) {
+        private long add(long amount, Action action) {
             long toAdd = amount;
             // first we try to add the items to an already-containing drive
             for (QIODriveKey key : containingDrives) {
-                toAdd = addItemsToDrive(toAdd, driveMap.get(key));
+                toAdd = addItemsToDrive(toAdd, driveMap.get(key), action);
                 if (toAdd == 0) {
                     break;
                 }
@@ -435,53 +626,56 @@ public class QIOFrequency extends Frequency {
             // next, we add the items to any drive that will take it
             if (toAdd > 0) {
                 for (QIODriveData data : driveMap.values()) {
-                    if (containingDrives.contains(data.getKey())) {
-                        continue;
-                    }
-                    toAdd = addItemsToDrive(toAdd, data);
-                    if (toAdd == 0) {
-                        break;
+                    if (!containingDrives.contains(data.getKey())) {
+                        toAdd = addItemsToDrive(toAdd, data, action);
+                        if (toAdd == 0) {
+                            break;
+                        }
                     }
                 }
             }
-            // update internal/core values and return
-            count += amount - toAdd;
-            totalCount += amount - toAdd;
-            setNeedsUpdate(itemType);
+            if (action.execute()) {
+                // update internal/core values
+                count += amount - toAdd;
+                totalCount += amount - toAdd;
+                setNeedsUpdate(itemType);
+            }
             return toAdd;
         }
 
-        private long addItemsToDrive(long toAdd, QIODriveData data) {
-            long rejects = data.add(itemType, toAdd);
-            if (rejects < toAdd) {
+        private long addItemsToDrive(long toAdd, QIODriveData data, Action action) {
+            long rejects = data.add(itemType, toAdd, action);
+            if (action.execute() && rejects < toAdd) {
                 containingDrives.add(data.getKey());
             }
             return rejects;
         }
 
-        private ItemStack remove(int amount) {
-            ItemStack ret = ItemStack.EMPTY;
+        private long remove(long amount, Action action) {
+            long removed = 0;
             for (Iterator<QIODriveKey> iter = containingDrives.iterator(); iter.hasNext(); ) {
                 QIODriveData data = driveMap.get(iter.next());
-                ItemStack stack = data.remove(itemType, amount - ret.getCount());
-                if (ret.isEmpty()) {
-                    ret = stack;
-                } else {
-                    ret.grow(stack.getCount());
-                }
+                removed += data.remove(itemType, amount - removed, action);
                 // remove this drive from containingDrives if it doesn't have this item anymore
-                if (data.getStored(itemType) == 0) {
+                if (action.execute() && data.getStored(itemType) == 0) {
                     iter.remove();
                 }
                 // break early if we found enough items
-                if (ret.getCount() == amount) {
+                if (removed == amount) {
                     break;
                 }
             }
-            count -= ret.getCount();
-            totalCount -= ret.getCount();
-            setNeedsUpdate(itemType);
-            return ret;
+            if (action.execute()) {
+                count -= removed;
+                totalCount -= removed;
+                setNeedsUpdate(itemType);
+            }
+            return removed;
+        }
+
+        private ItemStack remove(int amount) {
+            int removed = MathUtils.clampToInt(remove(amount, Action.EXECUTE));
+            return removed == 0 ? ItemStack.EMPTY : itemType.createStack(removed);
         }
 
         public long getCount() {

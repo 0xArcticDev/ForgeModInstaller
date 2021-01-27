@@ -1,7 +1,5 @@
 package mekanism.common.block;
 
-import java.text.NumberFormat;
-import java.util.Random;
 import javax.annotation.Nonnull;
 import mekanism.api.chemical.gas.GasStack;
 import mekanism.api.text.EnumColor;
@@ -9,77 +7,46 @@ import mekanism.common.MekanismLang;
 import mekanism.common.block.prefab.BlockTile.BlockTileModel;
 import mekanism.common.content.blocktype.BlockTypeTile;
 import mekanism.common.registries.MekanismBlockTypes;
-import mekanism.common.registries.MekanismParticleTypes;
 import mekanism.common.tile.TileEntityRadioactiveWasteBarrel;
 import mekanism.common.util.WorldUtils;
 import mekanism.common.util.text.TextUtils;
-import net.minecraft.block.BlockState;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.particles.BasicParticleType;
-import net.minecraft.util.ActionResultType;
-import net.minecraft.util.Hand;
-import net.minecraft.util.Util;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.BlockRayTraceResult;
-import net.minecraft.util.text.ITextComponent;
-import net.minecraft.world.IBlockReader;
-import net.minecraft.world.World;
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.BlockHitResult;
 
 public class BlockRadioactiveWasteBarrel extends BlockTileModel<TileEntityRadioactiveWasteBarrel, BlockTypeTile<TileEntityRadioactiveWasteBarrel>> {
-
-    private static final NumberFormat intFormatter = NumberFormat.getIntegerInstance();
 
     public BlockRadioactiveWasteBarrel() {
         super(MekanismBlockTypes.RADIOACTIVE_WASTE_BARREL);
     }
 
-    @Override
-    public void animateTick(@Nonnull BlockState state, @Nonnull World world, @Nonnull BlockPos pos, @Nonnull Random random) {
-        TileEntityRadioactiveWasteBarrel tile = WorldUtils.getTileEntity(TileEntityRadioactiveWasteBarrel.class, world, pos);
-        if (tile != null) {
-            int count = (int) (10 * tile.getGasScale());
-            if (count > 0) {
-                for (int i = 0; i < random.nextInt(count); i++) {
-                    double randX = pos.getX() - 0.1 + random.nextDouble() * 1.2;
-                    double randY = pos.getY() - 0.1 + random.nextDouble() * 1.2;
-                    double randZ = pos.getZ() - 0.1 + random.nextDouble() * 1.2;
-                    world.addParticle((BasicParticleType) MekanismParticleTypes.RADIATION.getParticleType(), randX, randY, randZ, 0, 0, 0);
-                }
-            }
-        }
-    }
-
-    @Override
-    @Deprecated
-    public float getPlayerRelativeBlockHardness(@Nonnull BlockState state, @Nonnull PlayerEntity player, @Nonnull IBlockReader world, @Nonnull BlockPos pos) {
-        float speed = super.getPlayerRelativeBlockHardness(state, player, world, pos);
-        TileEntityRadioactiveWasteBarrel tile = WorldUtils.getTileEntity(TileEntityRadioactiveWasteBarrel.class, world, pos, true);
-        return tile != null && tile.getGasScale() > 0 ? speed / 5F : speed;
-    }
-
     @Nonnull
     @Override
     @Deprecated
-    public ActionResultType onBlockActivated(@Nonnull BlockState state, @Nonnull World world, @Nonnull BlockPos pos, @Nonnull PlayerEntity player, @Nonnull Hand hand,
-          @Nonnull BlockRayTraceResult hit) {
-        if (!player.isSneaking()) {
-            return ActionResultType.PASS;
+    public InteractionResult use(@Nonnull BlockState state, @Nonnull Level world, @Nonnull BlockPos pos, @Nonnull Player player, @Nonnull InteractionHand hand,
+          @Nonnull BlockHitResult hit) {
+        if (!player.isShiftKeyDown()) {
+            return InteractionResult.PASS;
         }
         TileEntityRadioactiveWasteBarrel tile = WorldUtils.getTileEntity(TileEntityRadioactiveWasteBarrel.class, world, pos);
         if (tile == null) {
-            return ActionResultType.PASS;
-        }
-        if (!world.isRemote()) {
+            return InteractionResult.PASS;
+        } else if (!world.isClientSide()) {
             GasStack stored = tile.getGas();
-            ITextComponent text;
+            Component text;
             if (stored.isEmpty()) {
                 text = MekanismLang.NO_GAS.translateColored(EnumColor.GRAY);
             } else {
-                String scale = TextUtils.getPercent(tile.getGasScale());
-                text = MekanismLang.STORED_MB_PERCENTAGE.translateColored(EnumColor.ORANGE, EnumColor.ORANGE, stored, EnumColor.GRAY, intFormatter.format(stored.getAmount()), scale);
+                text = MekanismLang.STORED_MB_PERCENTAGE.translateColored(EnumColor.ORANGE, EnumColor.ORANGE, stored, EnumColor.GRAY,
+                      TextUtils.format(stored.getAmount()), TextUtils.getPercent(tile.getGasScale()));
             }
-            player.sendMessage(text, Util.DUMMY_UUID);
+            player.sendSystemMessage(text);
         }
-        return ActionResultType.SUCCESS;
+        return InteractionResult.sidedSuccess(world.isClientSide);
     }
 }

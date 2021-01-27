@@ -2,43 +2,43 @@ package mekanism.common.recipe.builder;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-import it.unimi.dsi.fastutil.chars.Char2ObjectLinkedOpenHashMap;
+import it.unimi.dsi.fastutil.chars.Char2ObjectArrayMap;
 import it.unimi.dsi.fastutil.chars.Char2ObjectMap;
 import it.unimi.dsi.fastutil.chars.CharOpenHashSet;
 import it.unimi.dsi.fastutil.chars.CharSet;
 import java.util.ArrayList;
 import java.util.List;
 import javax.annotation.ParametersAreNonnullByDefault;
-import mcp.MethodsReturnNonnullByDefault;
 import mekanism.common.DataGenJsonConstants;
 import mekanism.common.recipe.pattern.RecipePattern;
-import net.minecraft.item.Item;
-import net.minecraft.item.crafting.IRecipeSerializer;
-import net.minecraft.item.crafting.Ingredient;
-import net.minecraft.tags.ITag;
-import net.minecraft.util.IItemProvider;
-import net.minecraft.util.ResourceLocation;
+import net.minecraft.MethodsReturnNonnullByDefault;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.world.item.crafting.RecipeSerializer;
+import net.minecraft.world.level.ItemLike;
 
 @ParametersAreNonnullByDefault
 @MethodsReturnNonnullByDefault
 public class ExtendedShapedRecipeBuilder extends BaseRecipeBuilder<ExtendedShapedRecipeBuilder> {
 
-    private final Char2ObjectMap<Ingredient> key = new Char2ObjectLinkedOpenHashMap<>();
+    private final Char2ObjectMap<Ingredient> key = new Char2ObjectArrayMap<>(9);
     private final List<String> pattern = new ArrayList<>();
 
-    protected ExtendedShapedRecipeBuilder(IRecipeSerializer<?> serializer, IItemProvider result, int count) {
+    protected ExtendedShapedRecipeBuilder(RecipeSerializer<?> serializer, ItemLike result, int count) {
         super(serializer, result, count);
     }
 
-    private ExtendedShapedRecipeBuilder(IItemProvider result, int count) {
-        this(IRecipeSerializer.CRAFTING_SHAPED, result, count);
+    private ExtendedShapedRecipeBuilder(ItemLike result, int count) {
+        this(RecipeSerializer.SHAPED_RECIPE, result, count);
     }
 
-    public static ExtendedShapedRecipeBuilder shapedRecipe(IItemProvider result) {
+    public static ExtendedShapedRecipeBuilder shapedRecipe(ItemLike result) {
         return shapedRecipe(result, 1);
     }
 
-    public static ExtendedShapedRecipeBuilder shapedRecipe(IItemProvider result, int count) {
+    public static ExtendedShapedRecipeBuilder shapedRecipe(ItemLike result, int count) {
         return new ExtendedShapedRecipeBuilder(result, count);
     }
 
@@ -56,12 +56,12 @@ public class ExtendedShapedRecipeBuilder extends BaseRecipeBuilder<ExtendedShape
         return this;
     }
 
-    public ExtendedShapedRecipeBuilder key(char symbol, ITag<Item> tag) {
-        return key(symbol, Ingredient.fromTag(tag));
+    public ExtendedShapedRecipeBuilder key(char symbol, TagKey<Item> tag) {
+        return key(symbol, Ingredient.of(tag));
     }
 
-    public ExtendedShapedRecipeBuilder key(char symbol, IItemProvider item) {
-        return key(symbol, Ingredient.fromItems(item));
+    public ExtendedShapedRecipeBuilder key(char symbol, ItemLike item) {
+        return key(symbol, Ingredient.of(item));
     }
 
     public ExtendedShapedRecipeBuilder key(char symbol, Ingredient ingredient) {
@@ -109,8 +109,8 @@ public class ExtendedShapedRecipeBuilder extends BaseRecipeBuilder<ExtendedShape
         }
 
         @Override
-        public void serialize(JsonObject json) {
-            super.serialize(json);
+        public void serializeRecipeData(JsonObject json) {
+            super.serializeRecipeData(json);
             JsonArray jsonPattern = new JsonArray();
             for (String s : pattern) {
                 jsonPattern.add(s);
@@ -118,7 +118,7 @@ public class ExtendedShapedRecipeBuilder extends BaseRecipeBuilder<ExtendedShape
             json.add(DataGenJsonConstants.PATTERN, jsonPattern);
             JsonObject jsonobject = new JsonObject();
             for (Char2ObjectMap.Entry<Ingredient> entry : key.char2ObjectEntrySet()) {
-                jsonobject.add(String.valueOf(entry.getCharKey()), entry.getValue().serialize());
+                jsonobject.add(String.valueOf(entry.getCharKey()), entry.getValue().toJson());
             }
             json.add(DataGenJsonConstants.KEY, jsonobject);
         }

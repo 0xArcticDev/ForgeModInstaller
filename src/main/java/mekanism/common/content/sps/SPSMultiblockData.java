@@ -4,39 +4,45 @@ import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import java.util.List;
 import java.util.Map;
 import mekanism.api.Action;
+import mekanism.api.AutomationType;
 import mekanism.api.NBTConstants;
 import mekanism.api.chemical.attribute.ChemicalAttributeValidator;
 import mekanism.api.chemical.gas.GasStack;
 import mekanism.api.chemical.gas.IGasTank;
-import mekanism.api.inventory.AutomationType;
 import mekanism.api.math.FloatingLong;
 import mekanism.api.math.MathUtils;
 import mekanism.common.capabilities.chemical.multiblock.MultiblockChemicalTankBuilder;
 import mekanism.common.config.MekanismConfig;
+import mekanism.common.integration.computer.SpecialComputerMethodWrapper.ComputerChemicalTankWrapper;
+import mekanism.common.integration.computer.annotation.ComputerMethod;
+import mekanism.common.integration.computer.annotation.WrappingComputerMethod;
 import mekanism.common.inventory.container.sync.dynamic.ContainerSync;
 import mekanism.common.lib.multiblock.IValveHandler;
 import mekanism.common.lib.multiblock.MultiblockData;
 import mekanism.common.registries.MekanismGases;
 import mekanism.common.tile.multiblock.TileEntitySPSCasing;
 import mekanism.common.tile.multiblock.TileEntitySPSPort;
-import net.minecraft.entity.Entity;
-import net.minecraft.nbt.CompoundNBT;
-import net.minecraft.nbt.ListNBT;
-import net.minecraft.nbt.NBTUtil;
-import net.minecraft.util.DamageSource;
-import net.minecraft.util.Direction;
-import net.minecraft.util.math.AxisAlignedBB;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.World;
-import net.minecraftforge.common.util.Constants.NBT;
+import mekanism.common.util.NBTUtils;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NbtUtils;
+import net.minecraft.nbt.Tag;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.AABB;
 
 public class SPSMultiblockData extends MultiblockData implements IValveHandler {
 
     private static final long MAX_OUTPUT_GAS = 1_000;
 
     @ContainerSync
+    @WrappingComputerMethod(wrapper = ComputerChemicalTankWrapper.class, methodNames = {"getInput", "getInputCapacity", "getInputNeeded", "getInputFilledPercentage"})
     public IGasTank inputTank;
     @ContainerSync
+    @WrappingComputerMethod(wrapper = ComputerChemicalTankWrapper.class, methodNames = {"getOutput", "getOutputCapacity", "getOutputNeeded", "getOutputFilledPercentage"})
     public IGasTank outputTank;
 
     public final SyncableCoilData coilData = new SyncableCoilData();
@@ -52,8 +58,8 @@ public class SPSMultiblockData extends MultiblockData implements IValveHandler {
     @ContainerSync
     public double lastProcessed;
 
-    private boolean couldOperate;
-    private AxisAlignedBB deathZone;
+    public boolean couldOperate;
+    private AABB deathZone;
 
     public SPSMultiblockData(TileEntitySPSCasing tile) {
         super(tile);
@@ -66,10 +72,9 @@ public class SPSMultiblockData extends MultiblockData implements IValveHandler {
     }
 
     @Override
-    public void onCreated(World world) {
+    public void onCreated(Level world) {
         super.onCreated(world);
-        deathZone = new AxisAlignedBB(getMinPos().getX() + 2, getMinPos().getY() + 2, getMinPos().getZ() + 2,
-              getMaxPos().getX() - 1, getMaxPos().getY() - 1, getMaxPos().getZ() - 1);
+        deathZone = new AABB(getMinPos().offset(1, 1, 1), getMaxPos());
     }
 
     private long getMaxInputGas() {
@@ -77,11 +82,12 @@ public class SPSMultiblockData extends MultiblockData implements IValveHandler {
     }
 
     @Override
-    public boolean tick(World world) {
+    public boolean tick(Level world) {
         boolean needsPacket = super.tick(world);
         double processed = 0;
         couldOperate = canOperate();
         if (couldOperate && !receivedEnergy.isZero()) {
+            double lastProgress = progress;
             final int inputPerAntimatter = MekanismConfig.general.spsInputPerAntimatter.get();
             long inputNeeded = (inputPerAntimatter - inputProcessed) + inputPerAntimatter * (outputTank.getNeeded() - 1);
             double processable = receivedEnergy.doubleValue() / MekanismConfig.general.spsEnergyPerInput.get().doubleValue();
@@ -101,6 +107,9 @@ public class SPSMultiblockData extends MultiblockData implements IValveHandler {
                 }
                 progress %= 1;
             }
+            if (lastProgress != progress) {
+                markDirty();
+            }
         }
 
         if (!receivedEnergy.equals(lastReceivedEnergy) || processed != lastProcessed) {
@@ -117,17 +126,19 @@ public class SPSMultiblockData extends MultiblockData implements IValveHandler {
     }
 
     @Override
-    public void readUpdateTag(CompoundNBT tag) {
+    public void readUpdateTag(CompoundTag tag) {
         super.readUpdateTag(tag);
         coilData.read(tag);
         lastReceivedEnergy = FloatingLong.parseFloatingLong(tag.getString(NBTConstants.ENERGY_USAGE));
+        lastProcessed = tag.getDouble(NBTConstants.LAST_PROCESSED);
     }
 
     @Override
-    public void writeUpdateTag(CompoundNBT tag) {
+    public void writeUpdateTag(CompoundTag tag) {
         super.writeUpdateTag(tag);
         coilData.write(tag);
         tag.putString(NBTConstants.ENERGY_USAGE, lastReceivedEnergy.toString());
+        tag.putDouble(NBTConstants.LAST_PROCESSED, lastProcessed);
     }
 
     private long process(long operations) {
@@ -135,6 +146,7 @@ public class SPSMultiblockData extends MultiblockData implements IValveHandler {
             return 0;
         }
         long processed = inputTank.shrinkStack(operations, Action.EXECUTE);
+        int lastInputProcessed = inputProcessed;
         //Limit how much input we actually increase the input processed by to how much we were actually able to remove from the input tank
         inputProcessed += MathUtils.clampToInt(processed);
         final int inputPerAntimatter = MekanismConfig.general.spsInputPerAntimatter.get();
@@ -143,14 +155,17 @@ public class SPSMultiblockData extends MultiblockData implements IValveHandler {
             outputTank.insert(toAdd, Action.EXECUTE, AutomationType.INTERNAL);
             inputProcessed %= inputPerAntimatter;
         }
+        if (lastInputProcessed != inputProcessed) {
+            markDirty();
+        }
         return processed;
     }
 
-    private void kill(World world) {
+    private void kill(Level world) {
         if (!lastReceivedEnergy.isZero() && couldOperate && world.getRandom().nextInt() % 20 == 0) {
-            List<Entity> entitiesToDie = getWorld().getEntitiesWithinAABB(Entity.class, deathZone);
+            List<Entity> entitiesToDie = getWorld().getEntitiesOfClass(Entity.class, deathZone);
             for (Entity entity : entitiesToDie) {
-                entity.attackEntityFrom(DamageSource.MAGIC, lastReceivedEnergy.floatValue() / 1_000F);
+                entity.hurt(DamageSource.MAGIC, lastReceivedEnergy.floatValue() / 1_000F);
             }
         }
     }
@@ -158,7 +173,7 @@ public class SPSMultiblockData extends MultiblockData implements IValveHandler {
     public boolean canSupplyCoilEnergy(TileEntitySPSPort tile) {
         //We allow supplying coil energy for one tick more than the structure "canOperate" so that tick order does not
         // make it so that some coils are unable to supply energy
-        return (couldOperate || canOperate()) && coilData.coilMap.containsKey(tile.getPos());
+        return (couldOperate || canOperate()) && coilData.coilMap.containsKey(tile.getBlockPos());
     }
 
     public void addCoil(BlockPos portPos, Direction side) {
@@ -167,20 +182,21 @@ public class SPSMultiblockData extends MultiblockData implements IValveHandler {
 
     public void supplyCoilEnergy(TileEntitySPSPort tile, FloatingLong energy) {
         receivedEnergy = receivedEnergy.plusEqual(energy);
-        coilData.coilMap.get(tile.getPos()).receiveEnergy(energy);
+        coilData.coilMap.get(tile.getBlockPos()).receiveEnergy(energy);
     }
 
-    public boolean canOperate() {
+    private boolean canOperate() {
         return !inputTank.isEmpty() && outputTank.getNeeded() > 0;
     }
 
-    public static int getCoilLevel(FloatingLong energy) {
+    private static int getCoilLevel(FloatingLong energy) {
         if (energy.isZero()) {
             return 0;
         }
         return 1 + Math.max(0, (int) ((Math.log10(energy.doubleValue()) - 3) * 1.8));
     }
 
+    @ComputerMethod
     public double getProcessRate() {
         return Math.round((lastProcessed / MekanismConfig.general.spsInputPerAntimatter.get()) * 1_000) / 1_000D;
     }
@@ -190,8 +206,16 @@ public class SPSMultiblockData extends MultiblockData implements IValveHandler {
     }
 
     public boolean handlesSound(TileEntitySPSCasing tile) {
-        return tile.getPos().equals(getMinPos().add(3, 0, 0)) || tile.getPos().equals(getMaxPos().add(3, 0, 7));
+        return tile.getBlockPos().equals(getMinPos().offset(3, 0, 0)) ||
+               tile.getBlockPos().equals(getMaxPos().offset(-3, 0, 0));
     }
+
+    //Computer related methods
+    @ComputerMethod
+    private int getCoils() {
+        return coilData.coilMap.size();
+    }
+    //End computer related methods
 
     public static class SyncableCoilData {
 
@@ -210,25 +234,25 @@ public class SPSMultiblockData extends MultiblockData implements IValveHandler {
             return ret;
         }
 
-        public void write(CompoundNBT tags) {
-            ListNBT list = new ListNBT();
+        public void write(CompoundTag tags) {
+            ListTag list = new ListTag();
             for (CoilData data : coilMap.values()) {
-                CompoundNBT tag = new CompoundNBT();
-                tag.put(NBTConstants.POSITION, NBTUtil.writeBlockPos(data.coilPos));
-                tag.putInt(NBTConstants.SIDE, data.side.ordinal());
+                CompoundTag tag = new CompoundTag();
+                tag.put(NBTConstants.POSITION, NbtUtils.writeBlockPos(data.coilPos));
+                NBTUtils.writeEnum(tag, NBTConstants.SIDE, data.side);
                 tag.putInt(NBTConstants.LEVEL, data.prevLevel);
                 list.add(tag);
             }
             tags.put(NBTConstants.COILS, list);
         }
 
-        public void read(CompoundNBT tags) {
+        public void read(CompoundTag tags) {
             coilMap.clear();
-            ListNBT list = tags.getList(NBTConstants.COILS, NBT.TAG_COMPOUND);
+            ListTag list = tags.getList(NBTConstants.COILS, Tag.TAG_COMPOUND);
             for (int i = 0; i < list.size(); i++) {
-                CompoundNBT tag = list.getCompound(i);
-                BlockPos pos = NBTUtil.readBlockPos(tag.getCompound(NBTConstants.POSITION));
-                Direction side = Direction.byIndex(tag.getInt(NBTConstants.SIDE));
+                CompoundTag tag = list.getCompound(i);
+                BlockPos pos = NbtUtils.readBlockPos(tag.getCompound(NBTConstants.POSITION));
+                Direction side = Direction.from3DDataValue(tag.getInt(NBTConstants.SIDE));
                 CoilData data = new CoilData(pos, side);
                 data.prevLevel = tag.getInt(NBTConstants.LEVEL);
                 coilMap.put(data.coilPos, data);
@@ -266,11 +290,7 @@ public class SPSMultiblockData extends MultiblockData implements IValveHandler {
             if (o == this) {
                 return true;
             }
-            if (o instanceof CoilData) {
-                CoilData other = (CoilData) o;
-                return coilPos.equals(other.coilPos) && prevLevel == other.prevLevel;
-            }
-            return false;
+            return o instanceof CoilData other && coilPos.equals(other.coilPos) && prevLevel == other.prevLevel;
         }
     }
 }

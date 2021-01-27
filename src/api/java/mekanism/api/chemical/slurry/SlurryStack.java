@@ -2,19 +2,22 @@ package mekanism.api.chemical.slurry;
 
 import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
-import mcp.MethodsReturnNonnullByDefault;
 import mekanism.api.MekanismAPI;
 import mekanism.api.NBTConstants;
 import mekanism.api.chemical.ChemicalStack;
 import mekanism.api.providers.ISlurryProvider;
-import net.minecraft.nbt.CompoundNBT;
-import net.minecraft.network.PacketBuffer;
-import net.minecraftforge.registries.IRegistryDelegate;
+import net.minecraft.MethodsReturnNonnullByDefault;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraftforge.registries.IForgeRegistry;
 
 @ParametersAreNonnullByDefault
 @MethodsReturnNonnullByDefault
-public class SlurryStack extends ChemicalStack<Slurry> {
+public final class SlurryStack extends ChemicalStack<Slurry> {
 
+    /**
+     * Empty SlurryStack instance.
+     */
     public static final SlurryStack EMPTY = new SlurryStack(MekanismAPI.EMPTY_SLURRY, 0);
 
     /**
@@ -32,13 +35,8 @@ public class SlurryStack extends ChemicalStack<Slurry> {
     }
 
     @Override
-    protected IRegistryDelegate<Slurry> getDelegate(Slurry slurry) {
-        if (MekanismAPI.slurryRegistry().getKey(slurry) == null) {
-            MekanismAPI.logger.fatal("Failed attempt to create a SlurryStack for an unregistered Slurry {} (type {})", slurry.getRegistryName(),
-                  slurry.getClass().getName());
-            throw new IllegalArgumentException("Cannot create a SlurryStack from an unregistered Slurry");
-        }
-        return slurry.delegate;
+    protected IForgeRegistry<Slurry> getRegistry() {
+        return MekanismAPI.slurryRegistry();
     }
 
     @Override
@@ -53,7 +51,7 @@ public class SlurryStack extends ChemicalStack<Slurry> {
      *
      * @return SlurryStack stored in the tag compound
      */
-    public static SlurryStack readFromNBT(@Nullable CompoundNBT nbtTags) {
+    public static SlurryStack readFromNBT(@Nullable CompoundTag nbtTags) {
         if (nbtTags == null || nbtTags.isEmpty()) {
             return EMPTY;
         }
@@ -68,13 +66,12 @@ public class SlurryStack extends ChemicalStack<Slurry> {
         return new SlurryStack(type, amount);
     }
 
-    public static SlurryStack readFromPacket(PacketBuffer buf) {
-        Slurry slurry = buf.readRegistryId();
-        long amount = buf.readVarLong();
+    public static SlurryStack readFromPacket(FriendlyByteBuf buf) {
+        Slurry slurry = buf.readRegistryIdSafe(Slurry.class);
         if (slurry.isEmptyType()) {
             return EMPTY;
         }
-        return new SlurryStack(slurry, amount);
+        return new SlurryStack(slurry, buf.readVarLong());
     }
 
     /**
@@ -84,6 +81,9 @@ public class SlurryStack extends ChemicalStack<Slurry> {
      */
     @Override
     public SlurryStack copy() {
+        if (isEmpty()) {
+            return EMPTY;
+        }
         return new SlurryStack(this, getAmount());
     }
 }

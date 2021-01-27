@@ -1,6 +1,7 @@
 package mekanism.common.registration.impl;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -9,11 +10,15 @@ import mekanism.api.providers.IItemProvider;
 import mekanism.api.text.EnumColor;
 import mekanism.api.text.TextComponentUtil;
 import mekanism.common.Mekanism;
+import mekanism.common.content.gear.ModuleHelper;
+import mekanism.common.item.ItemModule;
 import mekanism.common.registration.WrappedDeferredRegister;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Rarity;
-import net.minecraft.util.text.ITextComponent;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Rarity;
+import net.minecraftforge.common.ForgeSpawnEggItem;
 import net.minecraftforge.registries.ForgeRegistries;
 
 public class ItemDeferredRegister extends WrappedDeferredRegister<Item> {
@@ -25,7 +30,7 @@ public class ItemDeferredRegister extends WrappedDeferredRegister<Item> {
     }
 
     public static Item.Properties getMekBaseProperties() {
-        return new Item.Properties().group(Mekanism.tabMekanism);
+        return new Item.Properties().tab(Mekanism.tabMekanism);
     }
 
     public ItemRegistryObject<Item> register(String name) {
@@ -44,10 +49,16 @@ public class ItemDeferredRegister extends WrappedDeferredRegister<Item> {
         return register(name, properties -> new Item(properties) {
             @Nonnull
             @Override
-            public ITextComponent getDisplayName(@Nonnull ItemStack stack) {
-                return TextComponentUtil.build(color, super.getDisplayName(stack));
+            public Component getName(@Nonnull ItemStack stack) {
+                return TextComponentUtil.build(color, super.getName(stack));
             }
         });
+    }
+
+    public ItemRegistryObject<ItemModule> registerModule(ModuleRegistryObject<?> moduleDataSupplier) {
+        //Note: We use the internal helper just in case we end up needing to know it is an ItemModule instead of just an Item somewhere
+        return register("module_" + moduleDataSupplier.getInternalRegistryName(),
+              () -> ModuleHelper.INSTANCE.createModuleItem(moduleDataSupplier, getMekBaseProperties()));
     }
 
     public <ITEM extends Item> ItemRegistryObject<ITEM> register(String name, Function<Item.Properties, ITEM> sup) {
@@ -55,7 +66,7 @@ public class ItemDeferredRegister extends WrappedDeferredRegister<Item> {
     }
 
     public <ITEM extends Item> ItemRegistryObject<ITEM> registerUnburnable(String name, Function<Item.Properties, ITEM> sup) {
-        return register(name, () -> sup.apply(getMekBaseProperties().isImmuneToFire()));
+        return register(name, () -> sup.apply(getMekBaseProperties().fireResistant()));
     }
 
     public <ITEM extends Item> ItemRegistryObject<ITEM> register(String name, Supplier<? extends ITEM> sup) {
@@ -64,7 +75,13 @@ public class ItemDeferredRegister extends WrappedDeferredRegister<Item> {
         return registeredItem;
     }
 
+    public <ENTITY extends Mob> ItemRegistryObject<ForgeSpawnEggItem> registerSpawnEgg(EntityTypeRegistryObject<ENTITY> entityTypeProvider,
+          int primaryColor, int secondaryColor) {
+        return register(entityTypeProvider.getInternalRegistryName() + "_spawn_egg", props -> new ForgeSpawnEggItem(entityTypeProvider, primaryColor,
+              secondaryColor, props));
+    }
+
     public List<IItemProvider> getAllItems() {
-        return allItems;
+        return Collections.unmodifiableList(allItems);
     }
 }

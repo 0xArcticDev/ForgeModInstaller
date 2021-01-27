@@ -12,8 +12,9 @@ import mekanism.common.particle.SPSOrbitEffect;
 import mekanism.common.registries.MekanismBlocks;
 import mekanism.common.tile.prefab.TileEntityMultiblock;
 import mekanism.common.util.NBTUtils;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.CompoundNBT;
+import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.level.block.state.BlockState;
 
 public class TileEntitySPSCasing extends TileEntityMultiblock<SPSMultiblockData> {
 
@@ -22,27 +23,45 @@ public class TileEntitySPSCasing extends TileEntityMultiblock<SPSMultiblockData>
     private boolean handleSound;
     private boolean prevActive;
 
-    public TileEntitySPSCasing() {
-        super(MekanismBlocks.SPS_CASING);
+    public TileEntitySPSCasing(BlockPos pos, BlockState state) {
+        this(MekanismBlocks.SPS_CASING, pos, state);
     }
 
-    public TileEntitySPSCasing(IBlockProvider provider) {
-        super(provider);
+    public TileEntitySPSCasing(IBlockProvider provider, BlockPos pos, BlockState state) {
+        super(provider, pos, state);
     }
 
     @Override
     protected void onUpdateClient() {
         super.onUpdateClient();
-        orbitEffects.removeIf(effect -> !isMaster || effect.tick());
+        if (isMaster()) {
+            //If we are still the master tick each effect and remove it if it is done
+            orbitEffects.removeIf(SPSOrbitEffect::tick);
+        } else {
+            //Otherwise, if we are no longer master just clear them all directly rather than removing each in a removeIf
+            orbitEffects.clear();
+        }
     }
 
     @Override
-    protected void onUpdateServer(SPSMultiblockData multiblock) {
-        super.onUpdateServer(multiblock);
+    protected boolean onUpdateServer(SPSMultiblockData multiblock) {
+        boolean needsPacket = super.onUpdateServer(multiblock);
         boolean active = multiblock.isFormed() && multiblock.handlesSound(this) && multiblock.lastProcessed > 0;
         if (active != prevActive) {
             prevActive = active;
-            sendUpdatePacket();
+            needsPacket = true;
+        }
+        return needsPacket;
+    }
+
+    @Override
+    protected void structureChanged(SPSMultiblockData multiblock) {
+        super.structureChanged(multiblock);
+        //Transition the orbit effects over to the new multiblock
+        if (multiblock.isFormed()) {
+            for (SPSOrbitEffect orbitEffect : orbitEffects) {
+                orbitEffect.updateMultiblock(multiblock);
+            }
         }
     }
 
@@ -59,28 +78,21 @@ public class TileEntitySPSCasing extends TileEntityMultiblock<SPSMultiblockData>
     @Override
     protected boolean canPlaySound() {
         SPSMultiblockData multiblock = getMultiblock();
-        return multiblock.isFormed() && multiblock.lastProcessed > 0 && handleSound;
+        return multiblock.isFormed() && handleSound;
     }
 
     @Nonnull
     @Override
-    public CompoundNBT getReducedUpdateTag() {
-        CompoundNBT updateTag = super.getReducedUpdateTag();
+    public CompoundTag getReducedUpdateTag() {
+        CompoundTag updateTag = super.getReducedUpdateTag();
         SPSMultiblockData multiblock = getMultiblock();
-        updateTag.putBoolean(NBTConstants.HANDLE_SOUND, multiblock.isFormed() && multiblock.handlesSound(this));
-        if (multiblock.isFormed()) {
-            updateTag.putDouble(NBTConstants.LAST_PROCESSED, multiblock.lastProcessed);
-        }
+        updateTag.putBoolean(NBTConstants.HANDLE_SOUND, multiblock.isFormed() && multiblock.handlesSound(this) && multiblock.lastProcessed > 0);
         return updateTag;
     }
 
     @Override
-    public void handleUpdateTag(BlockState state, @Nonnull CompoundNBT tag) {
-        super.handleUpdateTag(state, tag);
+    public void handleUpdateTag(@Nonnull CompoundTag tag) {
+        super.handleUpdateTag(tag);
         NBTUtils.setBooleanIfPresent(tag, NBTConstants.HANDLE_SOUND, value -> handleSound = value);
-        SPSMultiblockData multiblock = getMultiblock();
-        if (multiblock.isFormed()) {
-            multiblock.lastProcessed = tag.getDouble(NBTConstants.LAST_PROCESSED);
-        }
     }
 }

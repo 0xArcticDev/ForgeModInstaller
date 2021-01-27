@@ -1,10 +1,15 @@
 package mekanism.common.lib;
 
 import java.util.Locale;
+import net.minecraft.tags.TagKey;
 
 public class WildcardMatcher {
 
     private WildcardMatcher() {
+    }
+
+    public static boolean matches(String wildcard, TagKey<?> key) {
+        return matches(wildcard, key.location().toString());
     }
 
     public static boolean matches(String wildcard, String text) {
@@ -33,7 +38,7 @@ public class WildcardMatcher {
             }
             textIndex++;
         }
-        // break if there's more text left and we didn't our query with a wildcard char
+        // break if there's more text left, and we didn't end our query with a wildcard char
         return textIndex >= text.length() || (!wildcard.isEmpty() && wildcard.charAt(wildcard.length() - 1) == '*');
     }
 }

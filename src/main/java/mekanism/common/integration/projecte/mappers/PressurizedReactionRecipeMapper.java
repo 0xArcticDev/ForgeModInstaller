@@ -1,23 +1,24 @@
-/*package mekanism.common.integration.projecte.mappers;
+package mekanism.common.integration.projecte.mappers;
 
 import java.util.List;
 import mekanism.api.annotations.NonNull;
 import mekanism.api.chemical.gas.GasStack;
 import mekanism.api.recipes.PressurizedReactionRecipe;
+import mekanism.api.recipes.PressurizedReactionRecipe.PressurizedReactionRecipeOutput;
 import mekanism.common.integration.projecte.IngredientHelper;
 import mekanism.common.integration.projecte.NSSGas;
 import mekanism.common.recipe.MekanismRecipeType;
 import moze_intel.projecte.api.mapper.collector.IMappingCollector;
+import moze_intel.projecte.api.mapper.recipe.INSSFakeGroupManager;
 import moze_intel.projecte.api.mapper.recipe.IRecipeTypeMapper;
 import moze_intel.projecte.api.mapper.recipe.RecipeTypeMapper;
 import moze_intel.projecte.api.nss.NSSFluid;
 import moze_intel.projecte.api.nss.NSSItem;
 import moze_intel.projecte.api.nss.NormalizedSimpleStack;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.crafting.IRecipe;
-import net.minecraft.item.crafting.IRecipeType;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.Recipe;
+import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraftforge.fluids.FluidStack;
-import org.apache.commons.lang3.tuple.Pair;
 
 @RecipeTypeMapper
 public class PressurizedReactionRecipeMapper implements IRecipeTypeMapper {
@@ -33,18 +34,22 @@ public class PressurizedReactionRecipeMapper implements IRecipeTypeMapper {
     }
 
     @Override
-    public boolean canHandle(IRecipeType<?> recipeType) {
-        return recipeType == MekanismRecipeType.REACTION;
+    public boolean isAvailable() {
+        return false;
     }
 
     @Override
-    public boolean handleRecipe(IMappingCollector<NormalizedSimpleStack, Long> mapper, IRecipe<?> iRecipe) {
-        if (!(iRecipe instanceof PressurizedReactionRecipe)) {
+    public boolean canHandle(RecipeType<?> recipeType) {
+        return recipeType == MekanismRecipeType.REACTION.get();
+    }
+
+    @Override
+    public boolean handleRecipe(IMappingCollector<NormalizedSimpleStack, Long> mapper, Recipe<?> iRecipe, INSSFakeGroupManager groupManager) {
+        if (!(iRecipe instanceof PressurizedReactionRecipe recipe)) {
             //Double check that we have a type of recipe we know how to handle
             return false;
         }
         boolean handled = false;
-        PressurizedReactionRecipe recipe = (PressurizedReactionRecipe) iRecipe;
         List<@NonNull ItemStack> itemRepresentations = recipe.getInputSolid().getRepresentations();
         List<@NonNull FluidStack> fluidRepresentations = recipe.getInputFluid().getRepresentations();
         List<@NonNull GasStack> gasRepresentations = recipe.getInputGas().getRepresentations();
@@ -54,9 +59,9 @@ public class PressurizedReactionRecipeMapper implements IRecipeTypeMapper {
                 NormalizedSimpleStack nssFluid = NSSFluid.createFluid(fluidRepresentation);
                 for (GasStack gasRepresentation : gasRepresentations) {
                     NormalizedSimpleStack nssGas = NSSGas.createGas(gasRepresentation);
-                    Pair<@NonNull ItemStack, @NonNull GasStack> output = recipe.getOutput(itemRepresentation, fluidRepresentation, gasRepresentation);
-                    ItemStack itemOutput = output.getLeft();
-                    GasStack gasOutput = output.getRight();
+                    PressurizedReactionRecipeOutput output = recipe.getOutput(itemRepresentation, fluidRepresentation, gasRepresentation);
+                    ItemStack itemOutput = output.item();
+                    GasStack gasOutput = output.gas();
                     IngredientHelper ingredientHelper = new IngredientHelper(mapper);
                     ingredientHelper.put(nssItem, itemRepresentation.getCount());
                     ingredientHelper.put(nssFluid, fluidRepresentation.getAmount());
@@ -95,4 +100,4 @@ public class PressurizedReactionRecipeMapper implements IRecipeTypeMapper {
         }
         return handled;
     }
-}*/
+}

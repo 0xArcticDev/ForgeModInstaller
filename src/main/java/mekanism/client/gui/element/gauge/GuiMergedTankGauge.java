@@ -13,7 +13,7 @@ import mekanism.common.capabilities.chemical.dynamic.ISlurryTracker;
 import mekanism.common.capabilities.merged.MergedTank;
 import mekanism.common.lib.transmitter.TransmissionType;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
-import net.minecraft.util.text.ITextComponent;
+import net.minecraft.network.chat.Component;
 
 public class GuiMergedTankGauge<HANDLER extends IMekanismFluidHandler & IGasTracker & IInfusionTracker & IPigmentTracker & ISlurryTracker> extends GuiGauge<Void>
       implements IJEIIngredientHelper {
@@ -27,23 +27,33 @@ public class GuiMergedTankGauge<HANDLER extends IMekanismFluidHandler & IGasTrac
     private final GuiPigmentGauge pigmentGauge;
     private final GuiSlurryGauge slurryGauge;
 
-    private ITextComponent label;
+    private Component label;
 
     public GuiMergedTankGauge(Supplier<MergedTank> mergedTankSupplier, Supplier<HANDLER> handlerSupplier, GaugeType type, IGuiWrapper gui, int x, int y, int width,
           int height) {
         super(type, gui, x, y, width, height);
         this.mergedTankSupplier = mergedTankSupplier;
         this.handlerSupplier = handlerSupplier;
-        fluidGauge = new GuiFluidGauge(() -> this.mergedTankSupplier.get().getFluidTank(), () -> this.handlerSupplier.get().getFluidTanks(null), type, gui, x, y, width, height);
-        gasGauge = new GuiGasGauge(() -> this.mergedTankSupplier.get().getGasTank(), () -> this.handlerSupplier.get().getGasTanks(null), type, gui, x, y, width, height);
-        infusionGauge = new GuiInfusionGauge(() -> this.mergedTankSupplier.get().getInfusionTank(), () -> this.handlerSupplier.get().getInfusionTanks(null), type, gui, x, y, width, height);
-        pigmentGauge = new GuiPigmentGauge(() -> this.mergedTankSupplier.get().getPigmentTank(), () -> this.handlerSupplier.get().getPigmentTanks(null), type, gui, x, y, width, height);
-        slurryGauge = new GuiSlurryGauge(() -> this.mergedTankSupplier.get().getSlurryTank(), () -> this.handlerSupplier.get().getSlurryTanks(null), type, gui, x, y, width, height);
+        fluidGauge = addPositionOnlyChild(new GuiFluidGauge(() -> this.mergedTankSupplier.get().getFluidTank(), () -> this.handlerSupplier.get().getFluidTanks(null), type, gui, x, y, width, height));
+        gasGauge = addPositionOnlyChild(new GuiGasGauge(() -> this.mergedTankSupplier.get().getGasTank(), () -> this.handlerSupplier.get().getGasTanks(null), type, gui, x, y, width, height));
+        infusionGauge = addPositionOnlyChild(new GuiInfusionGauge(() -> this.mergedTankSupplier.get().getInfusionTank(), () -> this.handlerSupplier.get().getInfusionTanks(null), type, gui, x, y, width, height));
+        pigmentGauge = addPositionOnlyChild(new GuiPigmentGauge(() -> this.mergedTankSupplier.get().getPigmentTank(), () -> this.handlerSupplier.get().getPigmentTanks(null), type, gui, x, y, width, height));
+        slurryGauge = addPositionOnlyChild(new GuiSlurryGauge(() -> this.mergedTankSupplier.get().getSlurryTank(), () -> this.handlerSupplier.get().getSlurryTanks(null), type, gui, x, y, width, height));
     }
 
-    public GuiMergedTankGauge<HANDLER> setLabel(ITextComponent label) {
+    public GuiMergedTankGauge<HANDLER> setLabel(Component label) {
         this.label = label;
         return this;
+    }
+
+    @Override
+    public GaugeOverlay getGaugeOverlay() {
+        return getCurrentGauge().getGaugeOverlay();
+    }
+
+    @Override
+    protected GaugeInfo getGaugeColor() {
+        return getCurrentGauge().getGaugeColor();
     }
 
     @Override
@@ -52,16 +62,12 @@ public class GuiMergedTankGauge<HANDLER extends IMekanismFluidHandler & IGasTrac
         if (currentGauge == null) {
             //If all the tanks are currently empty, pass the click event to all of them;
             // if multiple types are somehow stored in the dropper, insertion checks should prevent them from being inserted at the same time
-            fluidGauge.mouseClicked(mouseX, mouseY, button);
-            gasGauge.mouseClicked(mouseX, mouseY, button);
-            infusionGauge.mouseClicked(mouseX, mouseY, button);
-            pigmentGauge.mouseClicked(mouseX, mouseY, button);
-            slurryGauge.mouseClicked(mouseX, mouseY, button);
-        } else {
-            //Otherwise just send the click event to the corresponding gauge
-            currentGauge.mouseClicked(mouseX, mouseY, button);
+            return fluidGauge.mouseClicked(mouseX, mouseY, button) | gasGauge.mouseClicked(mouseX, mouseY, button) |
+                   infusionGauge.mouseClicked(mouseX, mouseY, button) | pigmentGauge.mouseClicked(mouseX, mouseY, button) |
+                   slurryGauge.mouseClicked(mouseX, mouseY, button);
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        //Otherwise, just send the click event to the corresponding gauge
+        return currentGauge.mouseClicked(mouseX, mouseY, button);
     }
 
     @Override
@@ -74,9 +80,9 @@ public class GuiMergedTankGauge<HANDLER extends IMekanismFluidHandler & IGasTrac
 
     @Nullable
     @Override
-    public Object getIngredient() {
+    public Object getIngredient(double mouseX, double mouseY) {
         GuiTankGauge<?, ?> currentGauge = getCurrentGaugeNoFallback();
-        return currentGauge == null ? null : currentGauge.getIngredient();
+        return currentGauge == null ? null : currentGauge.getIngredient(mouseX, mouseY);
     }
 
     @Override
@@ -91,12 +97,12 @@ public class GuiMergedTankGauge<HANDLER extends IMekanismFluidHandler & IGasTrac
     }
 
     @Override
-    public List<ITextComponent> getTooltipText() {
+    public List<Component> getTooltipText() {
         return getCurrentGauge().getTooltipText();
     }
 
     @Override
-    public ITextComponent getLabel() {
+    public Component getLabel() {
         return label;
     }
 
@@ -114,18 +120,13 @@ public class GuiMergedTankGauge<HANDLER extends IMekanismFluidHandler & IGasTrac
     @Nullable
     private GuiTankGauge<?, ?> getCurrentGaugeNoFallback() {
         MergedTank mergedTank = mergedTankSupplier.get();
-        switch (mergedTank.getCurrentType()) {
-            case FLUID:
-                return fluidGauge;
-            case GAS:
-                return gasGauge;
-            case INFUSION:
-                return infusionGauge;
-            case PIGMENT:
-                return pigmentGauge;
-            case SLURRY:
-                return slurryGauge;
-        }
-        return null;
+        return switch (mergedTank.getCurrentType()) {
+            case FLUID -> fluidGauge;
+            case GAS -> gasGauge;
+            case INFUSION -> infusionGauge;
+            case PIGMENT -> pigmentGauge;
+            case SLURRY -> slurryGauge;
+            default -> null;
+        };
     }
 }

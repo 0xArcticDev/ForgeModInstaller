@@ -20,6 +20,7 @@ public class JsonConstants {
     public static final String PIGMENT = "pigment";
     public static final String SLURRY = "slurry";
     public static final String FLUID = "fluid";
+    public static final String BASE = "base";
 
     //Recipes
     public static final String TYPE = "type";
@@ -34,7 +35,7 @@ public class JsonConstants {
     public static final String MAIN_INPUT = "mainInput";
     public static final String EXTRA_INPUT = "extraInput";
     public static final String ITEM_INPUT = "itemInput";
-    public static final String INFUSION_INPUT = "infusionInput";
+    public static final String CHEMICAL_INPUT = "chemicalInput";
     public static final String GAS_INPUT = "gasInput";
     public static final String SLURRY_INPUT = "slurryInput";
     public static final String FLUID_INPUT = "fluidInput";
@@ -50,4 +51,10 @@ public class JsonConstants {
 
     //Transmitter model
     public static final String GLASS = "glass";
+
+    //Advancement Triggers
+    public static final String ACTION = "action";
+    public static final String COPY = "copy";
+    public static final String KILLED = "killed";
+    public static final String SKIN = "skin";
 }

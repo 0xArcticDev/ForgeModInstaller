@@ -2,10 +2,10 @@ package mekanism.client.gui.element;
 
 import java.util.List;
 import mekanism.client.gui.IGuiWrapper;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.text.ITextComponent;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 
-public abstract class GuiTexturedElement extends GuiRelativeElement {
+public abstract class GuiTexturedElement extends GuiElement {
 
     protected final ResourceLocation resource;
 
@@ -20,6 +20,6 @@ public abstract class GuiTexturedElement extends GuiRelativeElement {
 
     public interface IInfoHandler {
 
-        List<ITextComponent> getInfo();
+        List<Component> getInfo();
     }
 }

@@ -1,19 +1,19 @@
 package mekanism.api.chemical;
 
 import javax.annotation.ParametersAreNonnullByDefault;
-import mcp.MethodsReturnNonnullByDefault;
 import mekanism.api.Action;
+import mekanism.api.AutomationType;
 import mekanism.api.IContentsListener;
 import mekanism.api.NBTConstants;
 import mekanism.api.chemical.attribute.ChemicalAttributeValidator;
-import mekanism.api.inventory.AutomationType;
-import net.minecraft.nbt.CompoundNBT;
+import net.minecraft.MethodsReturnNonnullByDefault;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraftforge.common.util.INBTSerializable;
 
 @ParametersAreNonnullByDefault
 @MethodsReturnNonnullByDefault
 public interface IChemicalTank<CHEMICAL extends Chemical<CHEMICAL>, STACK extends ChemicalStack<CHEMICAL>> extends IEmptyStackProvider<CHEMICAL, STACK>,
-      INBTSerializable<CompoundNBT>, IContentsListener {
+      INBTSerializable<CompoundTag>, IContentsListener {
 
     /**
      * Helper for creating a stack of the type this {@link IChemicalTank} is storing.
@@ -57,7 +57,8 @@ public interface IChemicalTank<CHEMICAL extends Chemical<CHEMICAL>, STACK extend
      * @param stack {@link ChemicalStack} to set this tank's contents to (may be empty).
      *
      * @apiNote Unsafe version of {@link #setStack(ChemicalStack)}. This method is exposed for implementation and code deduplication reasons only and should
-     * <strong>NOT</strong> be directly called outside of your own {@link IChemicalTank} where you already know the given {@link ChemicalStack} is valid.
+     * <strong>NOT</strong> be directly called outside your own {@link IChemicalTank} where you already know the given {@link ChemicalStack} is valid, or on the
+     * client side for purposes of receiving sync data and rendering.
      * @implNote If the internal stack does get updated make sure to call {@link #onContentsChanged()}
      */
     void setStackUnchecked(STACK stack);
@@ -82,7 +83,7 @@ public interface IChemicalTank<CHEMICAL extends Chemical<CHEMICAL>, STACK extend
      */
     default STACK insert(STACK stack, Action action, AutomationType automationType) {
         if (stack.isEmpty() || !isValid(stack)) {
-            //"Fail quick" if the given stack is empty or we can never insert the item or currently are unable to insert it
+            //"Fail quick" if the given stack is empty, or we can never insert the item or currently are unable to insert it
             return stack;
         }
         long needed = getNeeded();
@@ -193,7 +194,7 @@ public interface IChemicalTank<CHEMICAL extends Chemical<CHEMICAL>, STACK extend
             amount = maxStackSize;
         }
         if (getStored() == amount || action.simulate()) {
-            //If our size is not changing or we are only simulating the change, don't do anything
+            //If our size is not changing, or we are only simulating the change, don't do anything
             return amount;
         }
         setStack(createStack(getStack(), amount));
@@ -325,10 +326,10 @@ public interface IChemicalTank<CHEMICAL extends Chemical<CHEMICAL>, STACK extend
     }
 
     @Override
-    default CompoundNBT serializeNBT() {
-        CompoundNBT nbt = new CompoundNBT();
+    default CompoundTag serializeNBT() {
+        CompoundTag nbt = new CompoundTag();
         if (!isEmpty()) {
-            nbt.put(NBTConstants.STORED, getStack().write(new CompoundNBT()));
+            nbt.put(NBTConstants.STORED, getStack().write(new CompoundTag()));
         }
         return nbt;
     }

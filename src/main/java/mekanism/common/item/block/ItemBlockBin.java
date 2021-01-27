@@ -13,14 +13,15 @@ import mekanism.common.item.interfaces.IItemSustainedInventory;
 import mekanism.common.registration.impl.ItemDeferredRegister;
 import mekanism.common.tier.BinTier;
 import mekanism.common.util.text.TextUtils;
-import net.minecraft.item.ItemStack;
-import net.minecraft.util.text.ITextComponent;
-import net.minecraft.world.World;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.TooltipFlag;
+import net.minecraft.world.level.Level;
 
 public class ItemBlockBin extends ItemBlockTooltip<BlockBin> implements IItemSustainedInventory {
 
     public ItemBlockBin(BlockBin block) {
-        super(block, ItemDeferredRegister.getMekBaseProperties().maxStackSize(1));
+        super(block, ItemDeferredRegister.getMekBaseProperties().stacksTo(1));
     }
 
     @Override
@@ -29,7 +30,7 @@ public class ItemBlockBin extends ItemBlockTooltip<BlockBin> implements IItemSus
     }
 
     @Override
-    public void addStats(@Nonnull ItemStack stack, World world, @Nonnull List<ITextComponent> tooltip, boolean advanced) {
+    protected void addStats(@Nonnull ItemStack stack, Level world, @Nonnull List<Component> tooltip, @Nonnull TooltipFlag flag) {
         BinMekanismInventory inventory = BinMekanismInventory.create(stack);
         BinTier tier = getTier();
         if (inventory != null && tier != null) {
@@ -37,7 +38,7 @@ public class ItemBlockBin extends ItemBlockTooltip<BlockBin> implements IItemSus
             if (slot.isEmpty()) {
                 tooltip.add(MekanismLang.EMPTY.translateColored(EnumColor.DARK_RED));
             } else {
-                tooltip.add(TextComponentUtil.build(EnumColor.BRIGHT_GREEN, slot.getStack().getDisplayName()));
+                tooltip.add(TextComponentUtil.build(EnumColor.BRIGHT_GREEN, slot.getStack().getHoverName()));
                 if (tier == BinTier.CREATIVE) {
                     tooltip.add(MekanismLang.ITEM_AMOUNT.translateColored(EnumColor.PURPLE, EnumColor.GRAY, MekanismLang.INFINITE));
                 } else {
@@ -50,5 +51,10 @@ public class ItemBlockBin extends ItemBlockTooltip<BlockBin> implements IItemSus
                 tooltip.add(MekanismLang.CAPACITY_ITEMS.translateColored(EnumColor.INDIGO, EnumColor.GRAY, TextUtils.format(tier.getStorage())));
             }
         }
+    }
+
+    @Override
+    public boolean canContentsDrop(ItemStack stack) {
+        return getTier() != BinTier.CREATIVE;
     }
 }

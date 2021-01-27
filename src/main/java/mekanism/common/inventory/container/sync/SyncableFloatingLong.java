@@ -5,12 +5,12 @@ import java.util.function.Supplier;
 import javax.annotation.Nonnull;
 import mekanism.api.annotations.NonNull;
 import mekanism.api.math.FloatingLong;
-import mekanism.common.network.container.property.FloatingLongPropertyData;
-import mekanism.common.network.container.property.PropertyData;
-import mekanism.common.network.container.property.ShortPropertyData;
+import mekanism.common.network.to_client.container.property.FloatingLongPropertyData;
+import mekanism.common.network.to_client.container.property.PropertyData;
+import mekanism.common.network.to_client.container.property.ShortPropertyData;
 
 /**
- * Version of {@link net.minecraft.util.IntReferenceHolder} for handling floating long
+ * Version of {@link net.minecraft.world.inventory.DataSlot} for handling floating long
  */
 public class SyncableFloatingLong implements ISyncableData {
 

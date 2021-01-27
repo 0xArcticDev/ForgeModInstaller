@@ -1,14 +1,21 @@
 package mekanism.tools.common.material;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import mekanism.tools.common.MekanismTools;
-import net.minecraft.item.crafting.Ingredient;
+import net.minecraft.tags.TagKey;
+import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.world.level.block.Block;
 
-public abstract class BaseMekanismMaterial extends IItemTierHelper implements IArmorMaterialHelper {
+public abstract class BaseMekanismMaterial extends IItemTierHelper implements IArmorMaterialHelper, IPaxelMaterial {
+
+    @Nullable
+    @Override
+    public abstract TagKey<Block> getTag();//Force this to be implemented
 
     public abstract int getShieldDurability();
 
-    public int getSwordDamage() {
+    public float getSwordDamage() {
         return 3;
     }
 
@@ -28,7 +35,7 @@ public abstract class BaseMekanismMaterial extends IItemTierHelper implements IA
 
     public abstract float getAxeAtkSpeed();
 
-    public int getPickaxeDamage() {
+    public float getPickaxeDamage() {
         return 1;
     }
 
@@ -36,31 +43,37 @@ public abstract class BaseMekanismMaterial extends IItemTierHelper implements IA
         return -2.8F;
     }
 
-    public int getHoeDamage() {
+    public float getHoeDamage() {
         //Default to match the vanilla hoe's implementation of being negative the attack damage of the material
-        return (int) -getAttackDamage();
+        return -getAttackDamageBonus();
     }
 
     public float getHoeAtkSpeed() {
-        return getAttackDamage() - 3.0F;
+        return getAttackDamageBonus() - 3.0F;
     }
 
-    public abstract float getPaxelDamage();
-
-    public float getPaxelAtkSpeed() {
-        return -2.4F;
+    @Override
+    public float getPaxelDamage() {
+        return getAxeDamage() + 1;
     }
 
-    public abstract int getPaxelHarvestLevel();
+    @Override
+    public int getPaxelMaxUses() {
+        return 2 * getUses();
+    }
 
-    public abstract int getPaxelMaxUses();
+    @Override
+    public float getPaxelEfficiency() {
+        return getSpeed();
+    }
 
-    public abstract float getPaxelEfficiency();
+    @Override
+    public int getPaxelEnchantability() {
+        return getCommonEnchantability();
+    }
 
     @Nonnull
     public abstract String getRegistryPrefix();
-
-    public abstract int getPaxelEnchantability();
 
     //Recombine the methods that are split in such a way as to make it so the compiler can reobfuscate them properly
     public abstract int getCommonEnchantability();

@@ -1,67 +1,51 @@
 package mekanism.tools.common.material.impl;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import mekanism.common.tags.MekanismTags;
+import mekanism.tools.common.ToolsTags;
 import mekanism.tools.common.material.BaseMekanismMaterial;
-import net.minecraft.inventory.EquipmentSlotType;
-import net.minecraft.item.crafting.Ingredient;
-import net.minecraft.util.SoundEvent;
-import net.minecraft.util.SoundEvents;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.tags.TagKey;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.world.level.block.Block;
 
 public class BronzeMaterialDefaults extends BaseMekanismMaterial {
 
     @Override
     public int getShieldDurability() {
-        return 1_568;
+        return 403;
     }
 
     @Override
     public float getAxeDamage() {
-        return 2;
+        return 7;
     }
 
     @Override
     public float getAxeAtkSpeed() {
-        return -3.1F;
+        return -3.0F;
     }
 
     @Override
-    public float getPaxelDamage() {
-        return 8;
+    public int getUses() {
+        return 375;
     }
 
     @Override
-    public int getPaxelHarvestLevel() {
-        return 3;
+    public float getSpeed() {
+        return 7;
     }
 
     @Override
-    public int getPaxelMaxUses() {
-        return 1_100;
+    public float getAttackDamageBonus() {
+        return 2;
     }
 
     @Override
-    public float getPaxelEfficiency() {
-        return 16;
-    }
-
-    @Override
-    public int getMaxUses() {
-        return 800;
-    }
-
-    @Override
-    public float getEfficiency() {
-        return 14;
-    }
-
-    @Override
-    public float getAttackDamage() {
-        return 6;
-    }
-
-    @Override
-    public int getHarvestLevel() {
+    public int getLevel() {
         return 2;
     }
 
@@ -72,37 +56,35 @@ public class BronzeMaterialDefaults extends BaseMekanismMaterial {
 
     @Override
     public float getToughness() {
-        return 0;
+        return 1;
     }
 
     @Override
-    public int getDurability(@Nonnull EquipmentSlotType slotType) {
-        switch (slotType) {
-            case FEET:
-                return 455;
-            case LEGS:
-                return 525;
-            case CHEST:
-                return 560;
-            case HEAD:
-                return 385;
-        }
-        return 0;
+    public int getDurabilityForSlot(@Nonnull EquipmentSlot slotType) {
+        return switch (slotType) {
+            case FEET -> 234;
+            case LEGS -> 270;
+            case CHEST -> 288;
+            case HEAD -> 198;
+            default -> 0;
+        };
     }
 
     @Override
-    public int getDamageReductionAmount(@Nonnull EquipmentSlotType slotType) {
-        switch (slotType) {
-            case FEET:
-                return 2;
-            case LEGS:
-                return 5;
-            case CHEST:
-                return 6;
-            case HEAD:
-                return 3;
-        }
-        return 0;
+    public int getDefenseForSlot(@Nonnull EquipmentSlot slotType) {
+        return switch (slotType) {
+            case FEET -> 2;
+            case LEGS -> 6;
+            case CHEST -> 7;
+            case HEAD -> 3;
+            default -> 0;
+        };
+    }
+
+    @Nonnull
+    @Override
+    public String getConfigCommentName() {
+        return "Bronze";
     }
 
     @Nonnull
@@ -111,21 +93,22 @@ public class BronzeMaterialDefaults extends BaseMekanismMaterial {
         return "bronze";
     }
 
+    @Nullable
     @Override
-    public int getPaxelEnchantability() {
-        return 14;
+    public TagKey<Block> getTag() {
+        return ToolsTags.Blocks.NEEDS_BRONZE_TOOL;
     }
 
     @Nonnull
     @Override
-    public SoundEvent getSoundEvent() {
-        return SoundEvents.ITEM_ARMOR_EQUIP_IRON;
+    public SoundEvent getEquipSound() {
+        return SoundEvents.ARMOR_EQUIP_IRON;
     }
 
     @Nonnull
     @Override
     public Ingredient getCommonRepairMaterial() {
-        return Ingredient.fromTag(MekanismTags.Items.INGOTS_BRONZE);
+        return Ingredient.of(MekanismTags.Items.INGOTS_BRONZE);
     }
 
     @Override

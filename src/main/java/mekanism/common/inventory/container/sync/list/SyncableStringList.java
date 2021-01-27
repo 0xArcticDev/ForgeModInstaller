@@ -4,11 +4,11 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import mekanism.api.annotations.NonNull;
-import mekanism.common.network.container.property.list.ListPropertyData;
-import mekanism.common.network.container.property.list.StringListPropertyData;
+import mekanism.common.network.to_client.container.property.list.ListPropertyData;
+import mekanism.common.network.to_client.container.property.list.StringListPropertyData;
 
 /**
- * Version of {@link net.minecraft.util.IntReferenceHolder} for handling string lists
+ * Version of {@link net.minecraft.world.inventory.DataSlot} for handling string lists
  */
 public class SyncableStringList extends SyncableList<String> {
 

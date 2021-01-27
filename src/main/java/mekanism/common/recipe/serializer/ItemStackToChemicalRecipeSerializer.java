@@ -8,33 +8,33 @@ import mekanism.api.JsonConstants;
 import mekanism.api.chemical.Chemical;
 import mekanism.api.chemical.ChemicalStack;
 import mekanism.api.recipes.chemical.ItemStackToChemicalRecipe;
-import mekanism.api.recipes.inputs.ItemStackIngredient;
+import mekanism.api.recipes.ingredients.ItemStackIngredient;
+import mekanism.api.recipes.ingredients.creator.IngredientCreatorAccess;
 import mekanism.common.Mekanism;
-import net.minecraft.item.crafting.IRecipeSerializer;
-import net.minecraft.network.PacketBuffer;
-import net.minecraft.util.JSONUtils;
-import net.minecraft.util.ResourceLocation;
-import net.minecraftforge.registries.ForgeRegistryEntry;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.GsonHelper;
+import net.minecraft.world.item.crafting.RecipeSerializer;
 
 public abstract class ItemStackToChemicalRecipeSerializer<CHEMICAL extends Chemical<CHEMICAL>, STACK extends ChemicalStack<CHEMICAL>,
-      RECIPE extends ItemStackToChemicalRecipe<CHEMICAL, STACK>> extends ForgeRegistryEntry<IRecipeSerializer<?>> implements IRecipeSerializer<RECIPE> {
+      RECIPE extends ItemStackToChemicalRecipe<CHEMICAL, STACK>> implements RecipeSerializer<RECIPE> {
 
     private final IFactory<CHEMICAL, STACK, RECIPE> factory;
 
-    public ItemStackToChemicalRecipeSerializer(IFactory<CHEMICAL, STACK, RECIPE> factory) {
+    protected ItemStackToChemicalRecipeSerializer(IFactory<CHEMICAL, STACK, RECIPE> factory) {
         this.factory = factory;
     }
 
     protected abstract STACK fromJson(@Nonnull JsonObject json, @Nonnull String key);
 
-    protected abstract STACK fromBuffer(@Nonnull PacketBuffer buffer);
+    protected abstract STACK fromBuffer(@Nonnull FriendlyByteBuf buffer);
 
     @Nonnull
     @Override
-    public RECIPE read(@Nonnull ResourceLocation recipeId, @Nonnull JsonObject json) {
-        JsonElement input = JSONUtils.isJsonArray(json, JsonConstants.INPUT) ? JSONUtils.getJsonArray(json, JsonConstants.INPUT) :
-                            JSONUtils.getJsonObject(json, JsonConstants.INPUT);
-        ItemStackIngredient inputIngredient = ItemStackIngredient.deserialize(input);
+    public RECIPE fromJson(@Nonnull ResourceLocation recipeId, @Nonnull JsonObject json) {
+        JsonElement input = GsonHelper.isArrayNode(json, JsonConstants.INPUT) ? GsonHelper.getAsJsonArray(json, JsonConstants.INPUT) :
+                            GsonHelper.getAsJsonObject(json, JsonConstants.INPUT);
+        ItemStackIngredient inputIngredient = IngredientCreatorAccess.item().deserialize(input);
         STACK output = fromJson(json, JsonConstants.OUTPUT);
         if (output.isEmpty()) {
             throw new JsonSyntaxException("Recipe output must not be empty.");
@@ -43,9 +43,9 @@ public abstract class ItemStackToChemicalRecipeSerializer<CHEMICAL extends Chemi
     }
 
     @Override
-    public RECIPE read(@Nonnull ResourceLocation recipeId, @Nonnull PacketBuffer buffer) {
+    public RECIPE fromNetwork(@Nonnull ResourceLocation recipeId, @Nonnull FriendlyByteBuf buffer) {
         try {
-            ItemStackIngredient inputIngredient = ItemStackIngredient.read(buffer);
+            ItemStackIngredient inputIngredient = IngredientCreatorAccess.item().read(buffer);
             STACK output = fromBuffer(buffer);
             return this.factory.create(recipeId, inputIngredient, output);
         } catch (Exception e) {
@@ -55,7 +55,7 @@ public abstract class ItemStackToChemicalRecipeSerializer<CHEMICAL extends Chemi
     }
 
     @Override
-    public void write(@Nonnull PacketBuffer buffer, @Nonnull RECIPE recipe) {
+    public void toNetwork(@Nonnull FriendlyByteBuf buffer, @Nonnull RECIPE recipe) {
         try {
             recipe.write(buffer);
         } catch (Exception e) {

@@ -1,25 +1,32 @@
 package mekanism.common.tile.component;
 
 import mekanism.common.inventory.container.MekanismContainer;
-import net.minecraft.nbt.CompoundNBT;
+import net.minecraft.nbt.CompoundTag;
 
 public interface ITileComponent {
 
-    void tick();
+    void read(CompoundTag nbtTags);
 
-    void read(CompoundNBT nbtTags);
+    void write(CompoundTag nbtTags);
 
-    void write(CompoundNBT nbtTags);
-
+    /**
+     * Called when the tile is removed, both permanently and during unloads.
+     */
     default void invalidate() {
     }
 
-    default void onChunkUnload() {
+    /**
+     * Called when the tile is permanently removed
+     */
+    default void removed() {
     }
 
-    void trackForMainContainer(MekanismContainer container);
+    default void trackForMainContainer(MekanismContainer container) {
+    }
 
-    void addToUpdateTag(CompoundNBT updateTag);
+    default void addToUpdateTag(CompoundTag updateTag) {
+    }
 
-    void readFromUpdateTag(CompoundNBT updateTag);
+    default void readFromUpdateTag(CompoundTag updateTag) {
+    }
 }

@@ -5,22 +5,22 @@ import it.unimi.dsi.fastutil.ints.IntList;
 import java.util.ArrayList;
 import java.util.List;
 import javax.annotation.ParametersAreNonnullByDefault;
-import mcp.MethodsReturnNonnullByDefault;
 import mekanism.api.Action;
+import mekanism.api.AutomationType;
 import mekanism.api.NBTConstants;
-import mekanism.api.inventory.AutomationType;
 import mekanism.common.inventory.slot.BinInventorySlot;
 import mekanism.common.item.block.ItemBlockBin;
 import mekanism.common.registries.MekanismRecipeSerializers;
 import mekanism.common.util.ItemDataUtils;
 import mekanism.common.util.StackUtils;
-import net.minecraft.inventory.CraftingInventory;
-import net.minecraft.inventory.IInventory;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.crafting.IRecipeSerializer;
-import net.minecraft.util.NonNullList;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.world.World;
+import net.minecraft.MethodsReturnNonnullByDefault;
+import net.minecraft.core.NonNullList;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.Container;
+import net.minecraft.world.inventory.CraftingContainer;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.RecipeSerializer;
+import net.minecraft.world.level.Level;
 import net.minecraftforge.event.entity.player.PlayerEvent.ItemCraftedEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.items.ItemHandlerHelper;
@@ -35,11 +35,11 @@ public class BinInsertRecipe extends BinRecipe {
     }
 
     @Override
-    public boolean matches(CraftingInventory inv, World world) {
+    public boolean matches(CraftingContainer inv, Level world) {
         ItemStack binStack = ItemStack.EMPTY;
         ItemStack foundType = ItemStack.EMPTY;
-        for (int i = 0; i < inv.getSizeInventory(); ++i) {
-            ItemStack stackInSlot = inv.getStackInSlot(i);
+        for (int i = 0; i < inv.getContainerSize(); ++i) {
+            ItemStack stackInSlot = inv.getItem(i);
             if (!stackInSlot.isEmpty()) {
                 if (stackInSlot.getItem() instanceof ItemBlockBin) {
                     if (!binStack.isEmpty()) {
@@ -63,16 +63,16 @@ public class BinInsertRecipe extends BinRecipe {
         BinInventorySlot slot = convertToSlot(binStack);
         ItemStack remaining = slot.insertItem(foundType, Action.SIMULATE, AutomationType.MANUAL);
         //Return that it doesn't match if our simulation claims we would not be able to accept any items into the bin
-        return !ItemStack.areItemStacksEqual(remaining, foundType);
+        return !ItemStack.matches(remaining, foundType);
     }
 
     @Override
-    public ItemStack getCraftingResult(CraftingInventory inv) {
+    public ItemStack assemble(CraftingContainer inv) {
         ItemStack binStack = ItemStack.EMPTY;
         ItemStack foundType = ItemStack.EMPTY;
         List<ItemStack> foundItems = new ArrayList<>();
-        for (int i = 0; i < inv.getSizeInventory(); ++i) {
-            ItemStack stackInSlot = inv.getStackInSlot(i);
+        for (int i = 0; i < inv.getContainerSize(); ++i) {
+            ItemStack stackInSlot = inv.getItem(i);
             if (!stackInSlot.isEmpty()) {
                 if (stackInSlot.getItem() instanceof ItemBlockBin) {
                     if (!binStack.isEmpty()) {
@@ -100,9 +100,9 @@ public class BinInsertRecipe extends BinRecipe {
         BinInventorySlot slot = convertToSlot(binStack);
         boolean hasInserted = false;
         for (ItemStack stack : foundItems) {
-            if (ItemStack.areItemStacksEqual(stack, slot.insertItem(stack, Action.EXECUTE, AutomationType.MANUAL))) {
+            if (ItemStack.matches(stack, slot.insertItem(stack, Action.EXECUTE, AutomationType.MANUAL))) {
                 if (hasInserted) {
-                    //If we can't insert anymore into the bin, and we did manage to insert some into it
+                    //If we can't insert any more items into the bin, and we did manage to insert some into it
                     // exit and return our stack
                     break;
                 }
@@ -116,13 +116,13 @@ public class BinInsertRecipe extends BinRecipe {
     }
 
     @Override
-    public NonNullList<ItemStack> getRemainingItems(CraftingInventory inv) {
-        NonNullList<ItemStack> remainingItems = NonNullList.withSize(inv.getSizeInventory(), ItemStack.EMPTY);
+    public NonNullList<ItemStack> getRemainingItems(CraftingContainer inv) {
+        NonNullList<ItemStack> remainingItems = NonNullList.withSize(inv.getContainerSize(), ItemStack.EMPTY);
         ItemStack binStack = ItemStack.EMPTY;
         ItemStack foundType = ItemStack.EMPTY;
         IntList foundSlots = new IntArrayList();
-        for (int i = 0; i < inv.getSizeInventory(); ++i) {
-            ItemStack stackInSlot = inv.getStackInSlot(i);
+        for (int i = 0; i < inv.getContainerSize(); ++i) {
+            ItemStack stackInSlot = inv.getItem(i);
             if (!stackInSlot.isEmpty()) {
                 if (stackInSlot.getItem() instanceof ItemBlockBin) {
                     if (!binStack.isEmpty()) {
@@ -150,7 +150,7 @@ public class BinInsertRecipe extends BinRecipe {
         BinInventorySlot slot = convertToSlot(binStack);
         for (int i = 0; i < foundSlots.size(); i++) {
             int index = foundSlots.getInt(i);
-            ItemStack stack = StackUtils.size(inv.getStackInSlot(index), 1);
+            ItemStack stack = StackUtils.size(inv.getItem(index), 1);
             ItemStack remaining = slot.insertItem(stack, Action.EXECUTE, AutomationType.MANUAL);
             remainingItems.set(index, remaining);
         }
@@ -158,14 +158,14 @@ public class BinInsertRecipe extends BinRecipe {
     }
 
     @Override
-    public boolean canFit(int width, int height) {
+    public boolean canCraftInDimensions(int width, int height) {
         //Require at least two slots as we have to represent at least the bin and the stack we are adding to it
         return width * height >= 2;
     }
 
     @Override
-    public IRecipeSerializer<?> getSerializer() {
-        return MekanismRecipeSerializers.BIN_INSERT.getRecipeSerializer();
+    public RecipeSerializer<?> getSerializer() {
+        return MekanismRecipeSerializers.BIN_INSERT.get();
     }
 
     @SubscribeEvent
@@ -175,16 +175,16 @@ public class BinInsertRecipe extends BinRecipe {
             BinInventorySlot slot = convertToSlot(result);
             ItemStack storedStack = slot.getStack();
             if (!storedStack.isEmpty()) {
-                IInventory craftingMatrix = event.getInventory();
-                for (int i = 0; i < craftingMatrix.getSizeInventory(); ++i) {
-                    ItemStack stack = craftingMatrix.getStackInSlot(i);
+                Container craftingMatrix = event.getInventory();
+                for (int i = 0; i < craftingMatrix.getContainerSize(); ++i) {
+                    ItemStack stack = craftingMatrix.getItem(i);
                     //Check remaining items
                     stack = StackUtils.size(stack, stack.getCount() - 1);
                     if (!stack.isEmpty() && ItemHandlerHelper.canItemStacksStack(storedStack, stack)) {
                         ItemStack remaining = slot.insertItem(stack, Action.EXECUTE, AutomationType.MANUAL);
-                        craftingMatrix.setInventorySlotContents(i, remaining);
+                        craftingMatrix.setItem(i, remaining);
                     } else {
-                        craftingMatrix.setInventorySlotContents(i, ItemStack.EMPTY);
+                        craftingMatrix.setItem(i, ItemStack.EMPTY);
                     }
                 }
                 ItemDataUtils.removeData(storedStack, NBTConstants.FROM_RECIPE);

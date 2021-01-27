@@ -4,16 +4,16 @@ import com.google.gson.JsonObject;
 import java.util.function.Consumer;
 import javax.annotation.Nonnull;
 import javax.annotation.ParametersAreNonnullByDefault;
-import mcp.MethodsReturnNonnullByDefault;
 import mekanism.api.JsonConstants;
 import mekanism.api.SerializerHelper;
 import mekanism.api.annotations.FieldsAreNonnullByDefault;
 import mekanism.api.datagen.recipe.MekanismRecipeBuilder;
-import mekanism.api.recipes.inputs.ItemStackIngredient;
-import mekanism.api.recipes.inputs.chemical.GasStackIngredient;
-import net.minecraft.data.IFinishedRecipe;
-import net.minecraft.item.ItemStack;
-import net.minecraft.util.ResourceLocation;
+import mekanism.api.recipes.ingredients.ChemicalStackIngredient.GasStackIngredient;
+import mekanism.api.recipes.ingredients.ItemStackIngredient;
+import net.minecraft.MethodsReturnNonnullByDefault;
+import net.minecraft.data.recipes.FinishedRecipe;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.ItemStack;
 
 @FieldsAreNonnullByDefault
 @ParametersAreNonnullByDefault
@@ -33,6 +33,14 @@ public class NucleosynthesizingRecipeBuilder extends MekanismRecipeBuilder<Nucle
         this.duration = duration;
     }
 
+    /**
+     * Creates a Nucleosynthesizing recipe builder.
+     *
+     * @param itemInput Item Input.
+     * @param gasInput  Gas Input.
+     * @param output    Output.
+     * @param duration  Duration in ticks that it takes the recipe to complete. Must be greater than zero.
+     */
     public static NucleosynthesizingRecipeBuilder nucleosynthesizing(ItemStackIngredient itemInput, GasStackIngredient gasInput, ItemStack output, int duration) {
         if (output.isEmpty()) {
             throw new IllegalArgumentException("This nucleosynthesizing recipe requires a non empty item output.");
@@ -48,8 +56,13 @@ public class NucleosynthesizingRecipeBuilder extends MekanismRecipeBuilder<Nucle
         return new NucleosynthesizingRecipeResult(id);
     }
 
-    public void build(Consumer<IFinishedRecipe> consumer) {
-        build(consumer, output.getItem().getRegistryName());
+    /**
+     * Builds this recipe using the output item's name as the recipe name.
+     *
+     * @param consumer Finished Recipe Consumer.
+     */
+    public void build(Consumer<FinishedRecipe> consumer) {
+        build(consumer, output.getItem());
     }
 
     public class NucleosynthesizingRecipeResult extends RecipeResult {
@@ -59,7 +72,7 @@ public class NucleosynthesizingRecipeBuilder extends MekanismRecipeBuilder<Nucle
         }
 
         @Override
-        public void serialize(@Nonnull JsonObject json) {
+        public void serializeRecipeData(@Nonnull JsonObject json) {
             json.add(JsonConstants.ITEM_INPUT, itemInput.serialize());
             json.add(JsonConstants.GAS_INPUT, gasInput.serialize());
             json.add(JsonConstants.OUTPUT, SerializerHelper.serializeItemStack(output));

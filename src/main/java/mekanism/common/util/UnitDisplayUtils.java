@@ -1,6 +1,8 @@
 package mekanism.common.util;
 
+import java.util.function.BooleanSupplier;
 import javax.annotation.Nonnull;
+import mekanism.api.IDisableableEnum;
 import mekanism.api.IIncrementalEnum;
 import mekanism.api.math.FloatingLong;
 import mekanism.api.math.MathUtils;
@@ -8,17 +10,22 @@ import mekanism.api.text.IHasTranslationKey;
 import mekanism.api.text.ILangEntry;
 import mekanism.api.text.TextComponentUtil;
 import mekanism.common.MekanismLang;
-import net.minecraft.util.text.ITextComponent;
+import mekanism.common.config.MekanismConfig;
+import mekanism.common.config.value.CachedFloatingLongValue;
+import mekanism.common.integration.energy.EnergyCompatUtils;
+import net.minecraft.network.chat.Component;
 
 /**
  * Code taken from UE and modified to fit Mekanism.
  */
-public class UnitDisplayUtils {//TODO: Maybe at some point improve on the ITextComponents the two getDisplay methods build, and have them have better translation keys with formats
+public class UnitDisplayUtils {
+    //TODO: Maybe at some point improve on the ITextComponents the two getDisplay methods build, and have them have better translation keys with formats
+    // That would improve how well this handles en_ud as currently the order of the number and the unit is not reversed and the unit is not upside down
 
     /**
      * Displays the unit as text. Does not handle negative numbers, as {@link FloatingLong} does not have a concept of negatives
      */
-    public static ITextComponent getDisplay(FloatingLong value, ElectricUnit unit, int decimalPlaces, boolean isShort) {
+    public static Component getDisplay(FloatingLong value, EnergyUnit unit, int decimalPlaces, boolean isShort) {
         ILangEntry label = unit.pluralLangEntry;
         if (isShort) {
             label = unit.shortLangEntry;
@@ -45,75 +52,79 @@ public class UnitDisplayUtils {//TODO: Maybe at some point improve on the ITextC
         return TextComponentUtil.build(value.toString(decimalPlaces), label);
     }
 
-    public static ITextComponent getDisplayShort(FloatingLong value, ElectricUnit unit) {
+    public static Component getDisplayShort(FloatingLong value, EnergyUnit unit) {
         return getDisplay(value, unit, 2, true);
     }
 
-    public static ITextComponent getDisplay(double temp, TemperatureUnit unit, int decimalPlaces, boolean shift, boolean isShort) {
+    public static Component getDisplay(double temp, TemperatureUnit unit, int decimalPlaces, boolean shift, boolean isShort) {
         return getDisplayBase(unit.convertFromK(temp, shift), unit, decimalPlaces, isShort, false);
     }
 
-    public static ITextComponent getDisplayBase(double value, Unit unit, int decimalPlaces, boolean isShort, boolean spaceBetweenSymbol) {
+    public static Component getDisplayBase(double value, Unit unit, int decimalPlaces, boolean isShort, boolean spaceBetweenSymbol) {
         ILangEntry label = unit.getLabel();
-        String prefix = "";
         String spaceStr = spaceBetweenSymbol ? " " : "";
-        if (value < 0) {
-            value = Math.abs(value);
-            prefix = "-";
-        }
         if (value == 0) {
             return isShort ? TextComponentUtil.getString(value + spaceStr + unit.getSymbol()) : TextComponentUtil.build(value, label);
+        }
+        boolean negative = value < 0;
+        if (negative) {
+            value = Math.abs(value);
         }
         for (int i = 0; i < EnumUtils.MEASUREMENT_UNITS.length; i++) {
             MeasurementUnit lowerMeasure = EnumUtils.MEASUREMENT_UNITS[i];
             String symbolStr = spaceStr + lowerMeasure.symbol;
             if (lowerMeasure.below(value) && lowerMeasure.ordinal() == 0) {
                 if (isShort) {
-                    return TextComponentUtil.getString(prefix + roundDecimals(lowerMeasure.process(value), decimalPlaces) + symbolStr + unit.getSymbol());
+                    return TextComponentUtil.getString(roundDecimals(negative, lowerMeasure.process(value), decimalPlaces) + symbolStr + unit.getSymbol());
                 }
-                return TextComponentUtil.build(prefix + roundDecimals(lowerMeasure.process(value), decimalPlaces) + " " + lowerMeasure.name, label);
+                return TextComponentUtil.build(roundDecimals(negative, lowerMeasure.process(value), decimalPlaces) + " " + lowerMeasure.name, label);
             }
             if (lowerMeasure.ordinal() + 1 >= EnumUtils.MEASUREMENT_UNITS.length) {
                 if (isShort) {
-                    return TextComponentUtil.getString(prefix + roundDecimals(lowerMeasure.process(value), decimalPlaces) + symbolStr + unit.getSymbol());
+                    return TextComponentUtil.getString(roundDecimals(negative, lowerMeasure.process(value), decimalPlaces) + symbolStr + unit.getSymbol());
                 }
-                return TextComponentUtil.build(prefix + roundDecimals(lowerMeasure.process(value), decimalPlaces) + " " + lowerMeasure.name, label);
+                return TextComponentUtil.build(roundDecimals(negative, lowerMeasure.process(value), decimalPlaces) + " " + lowerMeasure.name, label);
             }
             if (i + 1 < EnumUtils.MEASUREMENT_UNITS.length) {
                 MeasurementUnit upperMeasure = EnumUtils.MEASUREMENT_UNITS[i + 1];
                 if ((lowerMeasure.above(value) && upperMeasure.below(value)) || lowerMeasure.value == value) {
                     if (isShort) {
-                        return TextComponentUtil.getString(prefix + roundDecimals(lowerMeasure.process(value), decimalPlaces) + symbolStr + unit.getSymbol());
+                        return TextComponentUtil.getString(roundDecimals(negative, lowerMeasure.process(value), decimalPlaces) + symbolStr + unit.getSymbol());
                     }
-                    return TextComponentUtil.build(prefix + roundDecimals(lowerMeasure.process(value), decimalPlaces) + " " + lowerMeasure.name, label);
+                    return TextComponentUtil.build(roundDecimals(negative, lowerMeasure.process(value), decimalPlaces) + " " + lowerMeasure.name, label);
                 }
             }
         }
         if (isShort) {
-            return TextComponentUtil.getString(prefix + roundDecimals(value, decimalPlaces) + spaceStr + unit.getSymbol());
+            return TextComponentUtil.getString(roundDecimals(negative, value, decimalPlaces) + spaceStr + unit.getSymbol());
         }
-        return TextComponentUtil.build(prefix + roundDecimals(value, decimalPlaces) + " ", label);
+        return TextComponentUtil.build(roundDecimals(negative, value, decimalPlaces) + " ", label);
     }
 
-    public static ITextComponent getDisplayShort(double value, TemperatureUnit unit) {
+    public static Component getDisplayShort(double value, TemperatureUnit unit) {
         return getDisplayShort(value, unit, true);
     }
 
-    public static ITextComponent getDisplayShort(double value, TemperatureUnit unit, boolean shift) {
+    public static Component getDisplayShort(double value, TemperatureUnit unit, boolean shift) {
         return getDisplayShort(value, unit, shift, 2);
     }
 
-    public static ITextComponent getDisplayShort(double value, TemperatureUnit unit, boolean shift, int decimalPlaces) {
+    public static Component getDisplayShort(double value, TemperatureUnit unit, boolean shift, int decimalPlaces) {
         return getDisplay(value, unit, decimalPlaces, shift, true);
     }
 
-    public static ITextComponent getDisplayShort(double value, RadiationUnit unit, int decimalPlaces) {
+    public static Component getDisplayShort(double value, RadiationUnit unit, int decimalPlaces) {
         return getDisplayBase(value, unit, decimalPlaces, true, true);
     }
 
+    public static double roundDecimals(boolean negative, double d, int decimalPlaces) {
+        return negative ? roundDecimals(-d, decimalPlaces) : roundDecimals(d, decimalPlaces);
+    }
+
     public static double roundDecimals(double d, int decimalPlaces) {
-        int j = (int) (d * Math.pow(10, decimalPlaces));
-        return j / Math.pow(10, decimalPlaces);
+        double multiplier = Math.pow(10, decimalPlaces);
+        long j = (long) (d * multiplier);
+        return j / multiplier;
     }
 
     public static double roundDecimals(double d) {
@@ -127,37 +138,125 @@ public class UnitDisplayUtils {//TODO: Maybe at some point improve on the ITextC
         ILangEntry getLabel();
     }
 
-    public enum ElectricUnit {
-        JOULES(MekanismLang.ENERGY_JOULES, MekanismLang.ENERGY_JOULES_PLURAL, MekanismLang.ENERGY_JOULES_SHORT),
-        FORGE_ENERGY(MekanismLang.ENERGY_FORGE, MekanismLang.ENERGY_FORGE, MekanismLang.ENERGY_FORGE_SHORT),
-        ELECTRICAL_UNITS(MekanismLang.ENERGY_EU, MekanismLang.ENERGY_EU_PLURAL, MekanismLang.ENERGY_EU_SHORT);
+    public record EnergyConversionRate(CachedFloatingLongValue from, CachedFloatingLongValue to) {
+    }
 
+    public enum EnergyUnit implements IDisableableEnum<EnergyUnit>, IHasTranslationKey {
+        JOULES(MekanismLang.ENERGY_JOULES, MekanismLang.ENERGY_JOULES_PLURAL, MekanismLang.ENERGY_JOULES_SHORT, "j", () -> true) {
+            @Override
+            protected EnergyConversionRate getConversionRate() {
+                //Return null and then override usages of it as there is no conversion needed
+                return null;
+            }
+
+            @Override
+            public FloatingLong convertFrom(FloatingLong energy) {
+                return energy;
+            }
+
+            @Override
+            public FloatingLong convertToAsFloatingLong(FloatingLong joules) {
+                return joules;
+            }
+        },
+        FORGE_ENERGY(MekanismLang.ENERGY_FORGE, MekanismLang.ENERGY_FORGE, MekanismLang.ENERGY_FORGE_SHORT, "fe", () -> !MekanismConfig.general.blacklistForge.get()) {
+            @Override
+            protected EnergyConversionRate getConversionRate() {
+                return MekanismConfig.general.FORGE_CONVERSION_RATE;
+            }
+        },
+        ELECTRICAL_UNITS(MekanismLang.ENERGY_EU, MekanismLang.ENERGY_EU_PLURAL, MekanismLang.ENERGY_EU_SHORT, "eu", EnergyCompatUtils::useIC2) {
+            @Override
+            protected EnergyConversionRate getConversionRate() {
+                return MekanismConfig.general.IC2_CONVERSION_RATE;
+            }
+        };
+
+        private static final EnergyUnit[] TYPES = values();
+
+        private final BooleanSupplier checkEnabled;
         private final ILangEntry singularLangEntry;
         private final ILangEntry pluralLangEntry;
         private final ILangEntry shortLangEntry;
+        private final String tabName;
 
-        ElectricUnit(ILangEntry singularLangEntry, ILangEntry pluralLangEntry, ILangEntry shortLangEntry) {
+        EnergyUnit(ILangEntry singularLangEntry, ILangEntry pluralLangEntry, ILangEntry shortLangEntry, String tabName, BooleanSupplier checkEnabled) {
             this.singularLangEntry = singularLangEntry;
             this.pluralLangEntry = pluralLangEntry;
             this.shortLangEntry = shortLangEntry;
+            this.checkEnabled = checkEnabled;
+            this.tabName = tabName;
+        }
+
+        protected abstract EnergyConversionRate getConversionRate();
+
+        public FloatingLong convertFrom(long energy) {
+            return convertFrom(FloatingLong.createConst(energy));
+        }
+
+        public FloatingLong convertFrom(FloatingLong energy) {
+            return energy.multiply(getConversionRate().from.get());
+        }
+
+        public int convertToAsInt(FloatingLong joules) {
+            return convertToAsFloatingLong(joules).intValue();
+        }
+
+        public long convertToAsLong(FloatingLong joules) {
+            return convertToAsFloatingLong(joules).longValue();
+        }
+
+        public FloatingLong convertToAsFloatingLong(FloatingLong joules) {
+            return joules.multiply(getConversionRate().to.get());
+        }
+
+        @Override
+        public String getTranslationKey() {
+            return shortLangEntry.getTranslationKey();
+        }
+
+        @Nonnull
+        @Override
+        public EnergyUnit byIndex(int index) {
+            return MathUtils.getByIndexMod(TYPES, index);
+        }
+
+        public String getTabName() {
+            return tabName;
+        }
+
+        @Override
+        public boolean isEnabled() {
+            return checkEnabled.getAsBoolean();
+        }
+
+        public static EnergyUnit getConfigured() {
+            EnergyUnit type = MekanismConfig.common.energyUnit.get();
+            return type.isEnabled() ? type : EnergyUnit.JOULES;
         }
     }
 
-    public enum TemperatureUnit implements Unit {
-        KELVIN(MekanismLang.TEMPERATURE_KELVIN, "K", 0, 1),
-        CELSIUS(MekanismLang.TEMPERATURE_CELSIUS, "\u00B0C", 273.15, 1),
-        RANKINE(MekanismLang.TEMPERATURE_RANKINE, "R", 0, 1.8),
-        FAHRENHEIT(MekanismLang.TEMPERATURE_FAHRENHEIT, "\u00B0F", 459.67, 1.8),
-        AMBIENT(MekanismLang.TEMPERATURE_AMBIENT, "+STP", 300, 1);
+    public enum TemperatureUnit implements IIncrementalEnum<TemperatureUnit>, IHasTranslationKey, Unit {
+        KELVIN(MekanismLang.TEMPERATURE_KELVIN, MekanismLang.TEMPERATURE_KELVIN_SHORT, "K", "k", 0, 1),
+        CELSIUS(MekanismLang.TEMPERATURE_CELSIUS, MekanismLang.TEMPERATURE_CELSIUS_SHORT, "\u00B0C", "c", 273.15, 1),
+        RANKINE(MekanismLang.TEMPERATURE_RANKINE, MekanismLang.TEMPERATURE_RANKINE_SHORT, "R", "r", 0, 1.8),
+        FAHRENHEIT(MekanismLang.TEMPERATURE_FAHRENHEIT, MekanismLang.TEMPERATURE_FAHRENHEIT_SHORT, "\u00B0F", "f", 459.67, 1.8),
+        AMBIENT(MekanismLang.TEMPERATURE_AMBIENT, MekanismLang.TEMPERATURE_AMBIENT_SHORT, "+STP", "stp", 300, 1);
+
+        private static final TemperatureUnit[] TYPES = values();
 
         private final ILangEntry langEntry;
+        private final ILangEntry shortName;
         private final String symbol;
+        private final String tabName;
         public final double zeroOffset;
         public final double intervalSize;
 
-        TemperatureUnit(ILangEntry langEntry, String symbol, double offset, double size) {
+        TemperatureUnit(ILangEntry langEntry, ILangEntry shortName, String symbol, String tabName, double offset, double size) {
             this.langEntry = langEntry;
+            this.shortName = shortName;
             this.symbol = symbol;
+            this.tabName = tabName;
             this.zeroOffset = offset;
             this.intervalSize = size;
         }
@@ -178,6 +277,21 @@ public class UnitDisplayUtils {//TODO: Maybe at some point improve on the ITextC
         @Override
         public ILangEntry getLabel() {
             return langEntry;
+        }
+
+        @Override
+        public String getTranslationKey() {
+            return shortName.getTranslationKey();
+        }
+
+        public String getTabName() {
+            return tabName;
+        }
+
+        @Nonnull
+        @Override
+        public TemperatureUnit byIndex(int index) {
+            return MathUtils.getByIndexMod(TYPES, index);
         }
     }
 
@@ -209,7 +323,7 @@ public class UnitDisplayUtils {//TODO: Maybe at some point improve on the ITextC
         FEMTO("Femto", "f", 0.000000000000001D),
         PICO("Pico", "p", 0.000000000001D),
         NANO("Nano", "n", 0.000000001D),
-        MICRO("Micro", "u", 0.000001D),
+        MICRO("Micro", "\u00B5", 0.000001D),
         MILLI("Milli", "m", 0.001D),
         BASE("", "", 1),
         KILO("Kilo", "k", 1_000D),
@@ -232,7 +346,7 @@ public class UnitDisplayUtils {//TODO: Maybe at some point improve on the ITextC
         private final String symbol;
 
         /**
-         * Point by which a number is consider to be of this unit
+         * Point by which a number is considered to be of this unit
          */
         private final double value;
 
@@ -286,7 +400,7 @@ public class UnitDisplayUtils {//TODO: Maybe at some point improve on the ITextC
         private final String symbol;
 
         /**
-         * Point by which a number is consider to be of this unit
+         * Point by which a number is considered to be of this unit
          */
         private final FloatingLong value;
 
@@ -313,56 +427,6 @@ public class UnitDisplayUtils {//TODO: Maybe at some point improve on the ITextC
 
         public boolean below(FloatingLong d) {
             return d.smallerThan(value);
-        }
-    }
-
-    public enum EnergyType implements IIncrementalEnum<EnergyType>, IHasTranslationKey {
-        J(MekanismLang.ENERGY_JOULES_SHORT),
-        FE(MekanismLang.ENERGY_FORGE_SHORT),
-        EU(MekanismLang.ENERGY_EU_SHORT);
-
-        private static final EnergyType[] TYPES = values();
-        private final ILangEntry langEntry;
-
-        EnergyType(ILangEntry langEntry) {
-            this.langEntry = langEntry;
-        }
-
-        @Override
-        public String getTranslationKey() {
-            return langEntry.getTranslationKey();
-        }
-
-        @Nonnull
-        @Override
-        public EnergyType byIndex(int index) {
-            return MathUtils.getByIndexMod(TYPES, index);
-        }
-    }
-
-    public enum TempType implements IIncrementalEnum<TempType>, IHasTranslationKey {
-        K(MekanismLang.TEMPERATURE_KELVIN_SHORT),
-        C(MekanismLang.TEMPERATURE_CELSIUS_SHORT),
-        R(MekanismLang.TEMPERATURE_RANKINE_SHORT),
-        F(MekanismLang.TEMPERATURE_FAHRENHEIT_SHORT),
-        STP(MekanismLang.TEMPERATURE_AMBIENT_SHORT);
-
-        private static final TempType[] TYPES = values();
-        private final ILangEntry langEntry;
-
-        TempType(ILangEntry langEntry) {
-            this.langEntry = langEntry;
-        }
-
-        @Override
-        public String getTranslationKey() {
-            return langEntry.getTranslationKey();
-        }
-
-        @Nonnull
-        @Override
-        public TempType byIndex(int index) {
-            return MathUtils.getByIndexMod(TYPES, index);
         }
     }
 }

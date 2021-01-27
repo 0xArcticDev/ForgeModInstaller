@@ -1,8 +1,8 @@
 package mekanism.common.lib.math.voxel;
 
 import mekanism.common.lib.multiblock.Structure.Axis;
-import net.minecraft.util.Direction;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 
 public class VoxelCuboid implements IShape {
 
@@ -15,7 +15,7 @@ public class VoxelCuboid implements IShape {
     }
 
     public VoxelCuboid(int length, int height, int width) {
-        this(new BlockPos(0, 0, 0), new BlockPos(length - 1, height - 1, width - 1));
+        this(BlockPos.ZERO, new BlockPos(length - 1, height - 1, width - 1));
     }
 
     public int length() {
@@ -143,11 +143,7 @@ public class VoxelCuboid implements IShape {
 
     @Override
     public boolean equals(Object obj) {
-        if (!(obj instanceof VoxelCuboid)) {
-            return false;
-        }
-        VoxelCuboid other = (VoxelCuboid) obj;
-        return minPos.equals(other.minPos) && maxPos.equals(other.maxPos);
+        return obj instanceof VoxelCuboid other && minPos.equals(other.minPos) && maxPos.equals(other.maxPos);
     }
 
     public static VoxelCuboid from(VoxelPlane p1, VoxelPlane p2, int p1Pos, int p2Pos) {
@@ -164,7 +160,7 @@ public class VoxelCuboid implements IShape {
 
     @Override
     public String toString() {
-        return "Cuboid(start=" + minPos + ",bounds=(" + length() + "," + height() + "," + width() + "))";
+        return "Cuboid(start=" + minPos + ", bounds=(" + length() + "," + height() + "," + width() + "))";
     }
 
     public enum WallRelative {
@@ -206,8 +202,8 @@ public class VoxelCuboid implements IShape {
 
         public static final CuboidSide[] SIDES = values();
 
-        private static final CuboidSide[][] ORDERED = new CuboidSide[][]{{WEST, BOTTOM, NORTH}, {EAST, TOP, SOUTH}};
-        private static final CuboidSide[] OPPOSITES = new CuboidSide[]{TOP, BOTTOM, SOUTH, NORTH, EAST, WEST};
+        private static final CuboidSide[][] ORDERED = {{WEST, BOTTOM, NORTH}, {EAST, TOP, SOUTH}};
+        private static final CuboidSide[] OPPOSITES = {TOP, BOTTOM, SOUTH, NORTH, EAST, WEST};
 
         private final Axis axis;
         private final Face face;
@@ -249,7 +245,7 @@ public class VoxelCuboid implements IShape {
 
     public static class CuboidBuilder {
 
-        private final BlockPosBuilder[] bounds = new BlockPosBuilder[]{new BlockPosBuilder(), new BlockPosBuilder()};
+        private final BlockPosBuilder[] bounds = {new BlockPosBuilder(), new BlockPosBuilder()};
 
         public boolean isSet(CuboidSide side) {
             return bounds[side.getFace().ordinal()].isSet(side.getAxis());

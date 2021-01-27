@@ -1,14 +1,14 @@
 package mekanism.client.gui.element.bar;
 
-import com.mojang.blaze3d.matrix.MatrixStack;
+import com.mojang.blaze3d.vertex.PoseStack;
 import mekanism.api.energy.IEnergyContainer;
 import mekanism.client.gui.IGuiWrapper;
 import mekanism.client.gui.element.bar.GuiBar.IBarInfoHandler;
 import mekanism.common.util.MekanismUtils;
 import mekanism.common.util.MekanismUtils.ResourceType;
 import mekanism.common.util.text.EnergyDisplay;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.text.ITextComponent;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 
 public class GuiVerticalPowerBar extends GuiBar<IBarInfoHandler> {
 
@@ -25,8 +25,8 @@ public class GuiVerticalPowerBar extends GuiBar<IBarInfoHandler> {
     public GuiVerticalPowerBar(IGuiWrapper gui, IEnergyContainer container, int x, int y, int desiredHeight) {
         this(gui, new IBarInfoHandler() {
             @Override
-            public ITextComponent getTooltip() {
-                return EnergyDisplay.of(container.getEnergy(), container.getMaxEnergy()).getTextComponent();
+            public Component getTooltip() {
+                return EnergyDisplay.of(container).getTextComponent();
             }
 
             @Override
@@ -41,14 +41,16 @@ public class GuiVerticalPowerBar extends GuiBar<IBarInfoHandler> {
     }
 
     public GuiVerticalPowerBar(IGuiWrapper gui, IBarInfoHandler handler, int x, int y, int desiredHeight) {
-        super(ENERGY_BAR, gui, handler, x, y, texWidth, desiredHeight);
+        super(ENERGY_BAR, gui, handler, x, y, texWidth, desiredHeight, false);
         heightScale = desiredHeight / (double) texHeight;
     }
 
     @Override
-    protected void renderBarOverlay(MatrixStack matrix, int mouseX, int mouseY, float partialTicks) {
-        int displayInt = (int) (getHandler().getLevel() * texHeight);
-        int scaled = calculateScaled(heightScale, displayInt);
-        blit(matrix, x + 1, y + height - 1 - scaled, texWidth, scaled, 0, 0, texWidth, displayInt, texWidth, texHeight);
+    protected void renderBarOverlay(PoseStack matrix, int mouseX, int mouseY, float partialTicks, double handlerLevel) {
+        int displayInt = (int) (handlerLevel * texHeight);
+        if (displayInt > 0) {
+            int scaled = calculateScaled(heightScale, displayInt);
+            blit(matrix, x + 1, y + height - 1 - scaled, texWidth, scaled, 0, 0, texWidth, displayInt, texWidth, texHeight);
+        }
     }
 }

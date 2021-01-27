@@ -1,10 +1,10 @@
 package mekanism.tools.common.material;
 
 import javax.annotation.Nonnull;
-import net.minecraft.item.IArmorMaterial;
-import net.minecraft.item.crafting.Ingredient;
+import net.minecraft.world.item.ArmorMaterial;
+import net.minecraft.world.item.crafting.Ingredient;
 
-interface IArmorMaterialHelper extends IArmorMaterial {
+interface IArmorMaterialHelper extends ArmorMaterial {
 
     int getArmorEnchantability();
 
@@ -16,7 +16,7 @@ interface IArmorMaterialHelper extends IArmorMaterial {
      * BaseMekanismMaterial}
      */
     @Override
-    default int getEnchantability() {
+    default int getEnchantmentValue() {
         return getArmorEnchantability();
     }
 
@@ -32,7 +32,7 @@ interface IArmorMaterialHelper extends IArmorMaterial {
      */
     @Nonnull
     @Override
-    default Ingredient getRepairMaterial() {
+    default Ingredient getRepairIngredient() {
         return getArmorRepairMaterial();
     }
 }

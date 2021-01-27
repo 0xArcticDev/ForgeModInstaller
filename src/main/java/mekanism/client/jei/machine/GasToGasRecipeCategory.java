@@ -1,53 +1,40 @@
 package mekanism.client.jei.machine;
 
-import java.util.Collections;
-import mekanism.api.chemical.gas.GasStack;
+import javax.annotation.Nonnull;
 import mekanism.api.providers.IBlockProvider;
 import mekanism.api.recipes.GasToGasRecipe;
 import mekanism.client.gui.element.gauge.GaugeType;
 import mekanism.client.gui.element.gauge.GuiGasGauge;
-import mekanism.client.gui.element.progress.GuiProgress;
+import mekanism.client.gui.element.gauge.GuiGauge;
 import mekanism.client.gui.element.progress.ProgressType;
-import mekanism.client.gui.element.slot.GuiSlot;
 import mekanism.client.gui.element.slot.SlotType;
 import mekanism.client.jei.BaseRecipeCategory;
 import mekanism.client.jei.MekanismJEI;
+import mekanism.client.jei.MekanismJEIRecipeType;
 import mekanism.common.inventory.container.slot.SlotOverlay;
-import mezz.jei.api.gui.IRecipeLayout;
-import mezz.jei.api.gui.ingredient.IGuiIngredientGroup;
+import mekanism.common.tile.component.config.DataType;
+import mezz.jei.api.gui.builder.IRecipeLayoutBuilder;
 import mezz.jei.api.helpers.IGuiHelper;
-import mezz.jei.api.ingredients.IIngredients;
+import mezz.jei.api.recipe.IFocusGroup;
+import mezz.jei.api.recipe.RecipeIngredientRole;
 
 public class GasToGasRecipeCategory extends BaseRecipeCategory<GasToGasRecipe> {
 
-    public GasToGasRecipeCategory(IGuiHelper helper, IBlockProvider mekanismBlock) {
-        super(helper, mekanismBlock, 3, 12, 170, 70);
+    private final GuiGauge<?> input;
+    private final GuiGauge<?> output;
+
+    public GasToGasRecipeCategory(IGuiHelper helper, MekanismJEIRecipeType<GasToGasRecipe> recipeType, IBlockProvider mekanismBlock) {
+        super(helper, recipeType, mekanismBlock, 4, 13, 168, 60);
+        addSlot(SlotType.INPUT, 5, 56).with(SlotOverlay.MINUS);
+        addSlot(SlotType.OUTPUT, 155, 56).with(SlotOverlay.PLUS);
+        input = addElement(GuiGasGauge.getDummy(GaugeType.STANDARD.with(DataType.INPUT), this, 25, 13));
+        output = addElement(GuiGasGauge.getDummy(GaugeType.STANDARD.with(DataType.OUTPUT), this, 133, 13));
+        addConstantProgress(ProgressType.LARGE_RIGHT, 64, 39);
     }
 
     @Override
-    protected void addGuiElements() {
-        guiElements.add(new GuiSlot(SlotType.INPUT, this, 4, 55).with(SlotOverlay.MINUS));
-        guiElements.add(new GuiSlot(SlotType.OUTPUT, this, 154, 55).with(SlotOverlay.PLUS));
-        guiElements.add(GuiGasGauge.getDummy(GaugeType.STANDARD, this, 25, 13));
-        guiElements.add(GuiGasGauge.getDummy(GaugeType.STANDARD, this, 133, 13));
-        guiElements.add(new GuiProgress(() -> 1, ProgressType.LARGE_RIGHT, this, 64, 39));
-    }
-
-    @Override
-    public Class<? extends GasToGasRecipe> getRecipeClass() {
-        return GasToGasRecipe.class;
-    }
-
-    @Override
-    public void setIngredients(GasToGasRecipe recipe, IIngredients ingredients) {
-        ingredients.setInputLists(MekanismJEI.TYPE_GAS, Collections.singletonList(recipe.getInput().getRepresentations()));
-        ingredients.setOutput(MekanismJEI.TYPE_GAS, recipe.getOutputRepresentation());
-    }
-
-    @Override
-    public void setRecipe(IRecipeLayout recipeLayout, GasToGasRecipe recipe, IIngredients ingredients) {
-        IGuiIngredientGroup<GasStack> gasStacks = recipeLayout.getIngredientsGroup(MekanismJEI.TYPE_GAS);
-        initChemical(gasStacks, 0, true, 26 - xOffset, 14 - yOffset, 16, 58, recipe.getInput().getRepresentations(), true);
-        initChemical(gasStacks, 1, false, 134 - xOffset, 14 - yOffset, 16, 58, Collections.singletonList(recipe.getOutputRepresentation()), true);
+    public void setRecipe(@Nonnull IRecipeLayoutBuilder builder, GasToGasRecipe recipe, @Nonnull IFocusGroup focusGroup) {
+        initChemical(builder, MekanismJEI.TYPE_GAS, RecipeIngredientRole.INPUT, input, recipe.getInput().getRepresentations());
+        initChemical(builder, MekanismJEI.TYPE_GAS, RecipeIngredientRole.OUTPUT, output, recipe.getOutputDefinition());
     }
 }

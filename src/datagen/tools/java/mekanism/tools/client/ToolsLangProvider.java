@@ -3,8 +3,10 @@ package mekanism.tools.client;
 import mekanism.api.providers.IItemProvider;
 import mekanism.api.text.EnumColor;
 import mekanism.client.lang.BaseLanguageProvider;
+import mekanism.common.util.EnumUtils;
 import mekanism.tools.common.MekanismTools;
 import mekanism.tools.common.ToolsLang;
+import mekanism.tools.common.advancements.ToolsAdvancements;
 import mekanism.tools.common.registries.ToolsItems;
 import net.minecraft.data.DataGenerator;
 
@@ -17,6 +19,7 @@ public class ToolsLangProvider extends BaseLanguageProvider {
     @Override
     protected void addTranslations() {
         addItems();
+        addAdvancements();
         addMisc();
     }
 
@@ -46,8 +49,17 @@ public class ToolsLangProvider extends BaseLanguageProvider {
               ToolsItems.STEEL_PICKAXE, ToolsItems.STEEL_AXE, ToolsItems.STEEL_SHOVEL, ToolsItems.STEEL_HOE, ToolsItems.STEEL_PAXEL, ToolsItems.STEEL_SHIELD);
     }
 
+    private void addAdvancements() {
+        add(ToolsAdvancements.PAXEL, "Multi-Tool", "Craft any Paxel (Pickaxe, Axe, Shovel)");
+        add(ToolsAdvancements.ALTERNATE_ARMOR, "More Armor Types!", "Craft any piece of Armor from Mekanism Tools");
+        add(ToolsAdvancements.ALTERNATE_TOOLS, "More Tool Types!", "Craft any tool or weapon (except Paxels) from Mekanism Tools");
+        add(ToolsAdvancements.NOT_ENOUGH_SHIELDING, "Not Enough Shielding", "Craft any Shield added by Mekanism Tools");
+        add(ToolsAdvancements.BETTER_THAN_NETHERITE, "Better Than Netherite", "Protect yourself with a piece of Refined Obsidian Armor");
+        add(ToolsAdvancements.LOVED_BY_PIGLINS, "Loved By Piglins", "Refined Glowstone Armor glows even brighter than gold!");
+    }
+
     private void addMisc() {
-        add(ToolsLang.HP, "HP: %s");
+        add(ToolsLang.HP, "HP: %1$s");
     }
 
     private void addSet(String type, IItemProvider helmet, IItemProvider chestplate, IItemProvider leggings, IItemProvider boots, IItemProvider sword,
@@ -68,8 +80,8 @@ public class ToolsLangProvider extends BaseLanguageProvider {
     private void addShield(IItemProvider shield, String name) {
         add(shield, name);
         //Add names for all the bannered overlay types
-        for (EnumColor color : EnumColor.values()) {
-            if (color.hasDyeName()) {
+        for (EnumColor color : EnumUtils.COLORS) {
+            if (color.getDyeColor() != null) {
                 add(shield.getTranslationKey() + "." + color.getRegistryPrefix(), color.getEnglishName() + " " + name);
             }
         }

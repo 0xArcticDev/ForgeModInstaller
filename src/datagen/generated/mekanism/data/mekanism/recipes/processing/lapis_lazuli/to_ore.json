@@ -1,14 +1,14 @@
 {
   "type": "mekanism:combining",
-  "mainInput": {
-    "amount": 16,
-    "ingredient": {
-      "tag": "forge:dusts/lapis"
-    }
-  },
   "extraInput": {
     "ingredient": {
-      "tag": "forge:cobblestone"
+      "tag": "forge:cobblestone/normal"
+    }
+  },
+  "mainInput": {
+    "amount": 27,
+    "ingredient": {
+      "tag": "forge:dusts/lapis"
     }
   },
   "output": {

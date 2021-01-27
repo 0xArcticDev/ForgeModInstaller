@@ -2,31 +2,28 @@
   "type": "minecraft:block",
   "pools": [
     {
-      "rolls": 1,
+      "bonus_rolls": 0.0,
       "entries": [
         {
           "type": "minecraft:item",
           "functions": [
             {
               "function": "minecraft:copy_nbt",
-              "source": "block_entity",
               "ops": [
                 {
+                  "op": "replace",
                   "source": "GasTanks",
-                  "target": "mekData.GasTanks",
-                  "op": "replace"
+                  "target": "mekData.GasTanks"
                 }
-              ]
+              ],
+              "source": "block_entity"
             }
           ],
           "name": "mekanism:radioactive_waste_barrel"
         }
       ],
-      "conditions": [
-        {
-          "condition": "minecraft:survives_explosion"
-        }
-      ]
+      "name": "main",
+      "rolls": 1.0
     }
   ]
 }

@@ -3,15 +3,16 @@ package mekanism.common.recipe.builder;
 import com.google.gson.JsonObject;
 import java.util.function.Consumer;
 import javax.annotation.ParametersAreNonnullByDefault;
-import mcp.MethodsReturnNonnullByDefault;
 import mekanism.api.JsonConstants;
 import mekanism.api.datagen.recipe.MekanismRecipeBuilder;
 import mekanism.common.DataGenJsonConstants;
-import net.minecraft.data.IFinishedRecipe;
-import net.minecraft.item.Item;
-import net.minecraft.item.crafting.IRecipeSerializer;
-import net.minecraft.util.IItemProvider;
-import net.minecraft.util.ResourceLocation;
+import mekanism.common.util.RegistryUtils;
+import net.minecraft.MethodsReturnNonnullByDefault;
+import net.minecraft.data.recipes.FinishedRecipe;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.crafting.RecipeSerializer;
+import net.minecraft.world.level.ItemLike;
 
 @ParametersAreNonnullByDefault
 @MethodsReturnNonnullByDefault
@@ -21,19 +22,20 @@ public abstract class BaseRecipeBuilder<BUILDER extends BaseRecipeBuilder<BUILDE
     protected final int count;
     private String group;
 
-    protected BaseRecipeBuilder(IRecipeSerializer<?> serializer, IItemProvider result, int count) {
-        super(serializer.getRegistryName());
+    protected BaseRecipeBuilder(RecipeSerializer<?> serializer, ItemLike result, int count) {
+        super(RegistryUtils.getName(serializer));
         this.result = result.asItem();
         this.count = count;
     }
 
+    @SuppressWarnings("unchecked")
     public BUILDER setGroup(String group) {
         this.group = group;
         return (BUILDER) this;
     }
 
-    public void build(Consumer<IFinishedRecipe> consumer) {
-        build(consumer, result.getRegistryName());
+    public void build(Consumer<FinishedRecipe> consumer) {
+        build(consumer, result);
     }
 
     protected abstract class BaseRecipeResult extends RecipeResult {
@@ -43,7 +45,7 @@ public abstract class BaseRecipeBuilder<BUILDER extends BaseRecipeBuilder<BUILDE
         }
 
         @Override
-        public void serialize(JsonObject json) {
+        public void serializeRecipeData(JsonObject json) {
             if (group != null && !group.isEmpty()) {
                 json.addProperty(DataGenJsonConstants.GROUP, group);
             }
@@ -52,7 +54,7 @@ public abstract class BaseRecipeBuilder<BUILDER extends BaseRecipeBuilder<BUILDE
 
         protected void serializeResult(JsonObject json) {
             JsonObject jsonResult = new JsonObject();
-            jsonResult.addProperty(JsonConstants.ITEM, result.getRegistryName().toString());
+            jsonResult.addProperty(JsonConstants.ITEM, RegistryUtils.getName(result).toString());
             if (count > 1) {
                 jsonResult.addProperty(JsonConstants.COUNT, count);
             }

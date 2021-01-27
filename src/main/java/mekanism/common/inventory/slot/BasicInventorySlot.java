@@ -2,25 +2,28 @@ package mekanism.common.inventory.slot;
 
 import java.util.Objects;
 import java.util.function.BiPredicate;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
-import mcp.MethodsReturnNonnullByDefault;
 import mekanism.api.Action;
+import mekanism.api.AutomationType;
 import mekanism.api.IContentsListener;
 import mekanism.api.NBTConstants;
 import mekanism.api.annotations.FieldsAreNonnullByDefault;
 import mekanism.api.annotations.NonNull;
-import mekanism.api.inventory.AutomationType;
 import mekanism.api.inventory.IInventorySlot;
 import mekanism.common.inventory.container.slot.ContainerSlotType;
 import mekanism.common.inventory.container.slot.InventoryContainerSlot;
 import mekanism.common.inventory.container.slot.SlotOverlay;
+import mekanism.common.inventory.warning.ISupportsWarning;
 import mekanism.common.util.NBTUtils;
+import mekanism.common.util.RegistryUtils;
 import mekanism.common.util.StackUtils;
-import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.CompoundNBT;
-import net.minecraftforge.common.util.Constants.NBT;
+import net.minecraft.MethodsReturnNonnullByDefault;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.items.ItemHandlerHelper;
 
 @FieldsAreNonnullByDefault
@@ -76,6 +79,8 @@ public class BasicInventorySlot implements IInventorySlot {
     private ContainerSlotType slotType = ContainerSlotType.NORMAL;
     @Nullable
     private SlotOverlay slotOverlay;
+    @Nullable
+    private Consumer<ISupportsWarning<?>> warningAdder;
 
     protected BasicInventorySlot(Predicate<@NonNull ItemStack> canExtract, Predicate<@NonNull ItemStack> canInsert, Predicate<@NonNull ItemStack> validator,
           @Nullable IContentsListener listener, int x, int y) {
@@ -116,7 +121,7 @@ public class BasicInventorySlot implements IInventorySlot {
     private void setStack(ItemStack stack, boolean validateStack) {
         if (stack.isEmpty()) {
             if (current.isEmpty()) {
-                //If we are already empty just exit, so as to not fire onContentsChanged
+                //If we are already empty just exit, to not fire onContentsChanged
                 return;
             }
             current = ItemStack.EMPTY;
@@ -125,7 +130,7 @@ public class BasicInventorySlot implements IInventorySlot {
         } else {
             //Throws a RuntimeException as IItemHandlerModifiable specifies is allowed when something unexpected happens
             // As setStack is more meant to be used as an internal method
-            throw new RuntimeException("Invalid stack for slot: " + stack.getItem().getRegistryName() + " " + stack.getCount() + " " + stack.getTag());
+            throw new RuntimeException("Invalid stack for slot: " + RegistryUtils.getName(stack.getItem()) + " " + stack.getCount() + " " + stack.getTag());
         }
         onContentsChanged();
     }
@@ -133,7 +138,7 @@ public class BasicInventorySlot implements IInventorySlot {
     @Override
     public ItemStack insertItem(ItemStack stack, Action action, AutomationType automationType) {
         if (stack.isEmpty() || !isItemValid(stack) || !canInsert.test(stack, automationType)) {
-            //"Fail quick" if the given stack is empty or we can never insert the item or currently are unable to insert it
+            //"Fail quick" if the given stack is empty, or we can never insert the item or currently are unable to insert it
             return stack;
         }
         int needed = getLimit(stack) - getCount();
@@ -214,15 +219,32 @@ public class BasicInventorySlot implements IInventorySlot {
     @Nullable
     @Override
     public InventoryContainerSlot createContainerSlot() {
-        return new InventoryContainerSlot(this, x, y, slotType, slotOverlay, this::setStackUnchecked);
+        return new InventoryContainerSlot(this, x, y, slotType, slotOverlay, warningAdder, this::setStackUnchecked);
     }
 
     public void setSlotType(ContainerSlotType slotType) {
+        //TODO - 1.18: Re-evaluate this method as for the most part we now seem to be handling this in GuiMekanism
+        // and figuring it out based on the data type; which at the very least means we can probably remove some
+        // calls to this. Though there are also some cases where we want to override it where it doesn't now as
+        // the fallback sets it to normal basically regardless (see evaporation multiblock and input slots)
         this.slotType = slotType;
+    }
+
+    public void tracksWarnings(@Nullable Consumer<ISupportsWarning<?>> warningAdder) {
+        this.warningAdder = warningAdder;
     }
 
     public void setSlotOverlay(@Nullable SlotOverlay slotOverlay) {
         this.slotOverlay = slotOverlay;
+    }
+
+    @Nullable
+    protected final SlotOverlay getSlotOverlay() {
+        return slotOverlay;
+    }
+
+    protected final ContainerSlotType getSlotType() {
+        return slotType;
     }
 
     /**
@@ -246,7 +268,7 @@ public class BasicInventorySlot implements IInventorySlot {
             amount = maxStackSize;
         }
         if (getCount() == amount || action.simulate()) {
-            //If our size is not changing or we are only simulating the change, don't do anything
+            //If our size is not changing, or we are only simulating the change, don't do anything
             return amount;
         }
         current.setCount(amount);
@@ -291,10 +313,10 @@ public class BasicInventorySlot implements IInventorySlot {
     }
 
     @Override
-    public CompoundNBT serializeNBT() {
-        CompoundNBT nbt = new CompoundNBT();
+    public CompoundTag serializeNBT() {
+        CompoundTag nbt = new CompoundTag();
         if (!isEmpty()) {
-            nbt.put(NBTConstants.ITEM, current.write(new CompoundNBT()));
+            nbt.put(NBTConstants.ITEM, current.save(new CompoundTag()));
             if (getCount() > current.getMaxStackSize()) {
                 nbt.putInt(NBTConstants.SIZE_OVERRIDE, getCount());
             }
@@ -303,10 +325,10 @@ public class BasicInventorySlot implements IInventorySlot {
     }
 
     @Override
-    public void deserializeNBT(CompoundNBT nbt) {
+    public void deserializeNBT(CompoundTag nbt) {
         ItemStack stack = ItemStack.EMPTY;
-        if (nbt.contains(NBTConstants.ITEM, NBT.TAG_COMPOUND)) {
-            stack = ItemStack.read(nbt.getCompound(NBTConstants.ITEM));
+        if (nbt.contains(NBTConstants.ITEM, Tag.TAG_COMPOUND)) {
+            stack = ItemStack.of(nbt.getCompound(NBTConstants.ITEM));
             NBTUtils.setIntIfPresent(nbt, NBTConstants.SIZE_OVERRIDE, stack::setCount);
         }
         //Set the stack in an unchecked way so that if it is no longer valid, we don't end up
